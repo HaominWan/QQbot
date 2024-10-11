@@ -85,66 +85,81 @@ async def execute_function(ws, message):
 
             if message["message"][0]["type"] == "at":
                 print(str(message['self_id']) == message["message"][0]["data"]["qq"])
-                if str(message['self_id']) == message["message"][0]["data"]["qq"]:
-                    #获取当前群聊上下文
+                if str(bot_interfaces["bot_qq"]) == message["message"][0]["data"]["qq"]:
                     print("enter ai mode")
-                    if group_id in chatgpt_contents_group:
-                        chat_history = chatgpt_contents_group[group_id]
-                    else:
-                        chat_history = []
-                        if user_id in bot.super_users:
-                            system_role = roles.Murasame_goshujin_role
+                    if user_id in bot.super_users:
+                        if str(user_id) in chatgpt_contents_private:
+                            chat_history = chatgpt_contents_private[str(user_id)]
                         else:
-                            system_role = roles.Murasame_customs_role
-                        chat_history.append(
-                                {"role": "system", 
-                                "content": system_role
+                            chat_history = []
+                            chat_history.append(
+                                {
+                                    "role": "system", 
+                                    "content": roles.get_Murasame_goshujin_role(user_id,bot_interfaces["bot_qq"])
                                 }
                             )
+
+                        chat_history.append({"role": "user", "content": message_content})
+                        gpt_response = await call_groq_api(chat_history)
+                        chat_history.append({"role": "assistant", "content": gpt_response})
+                        chatgpt_contents_private[str(user_id)] = chat_history
+                        return await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"](gpt_response))
+                        
+                    else:
+                    #获取当前群聊上下文
+                        if group_id in chatgpt_contents_group:
+                            chat_history = chatgpt_contents_group[group_id]
+                        else:
+                            chat_history = []
+                            chat_history.append(
+                                    {"role": "system", 
+                                    "content": roles.get_Murasame_customs_role(user_id,bot_interfaces["bot_qq"])
+                                    }
+                                )
                     
-                    #用户新消息加入历史对话
-                    chat_history.append({"role": "user", "content": message_content})
-                    #调用ChatGPT API
-                    #gpt_response = await call_chatgpt_api(chat_history)
-                    gpt_response = await call_groq_api(chat_history)
-                    #将ChatGPT的回复加入历史
-                    chat_history.append({"role": "assistant", "content": gpt_response})
-                    #保存更新后的对话历史
-                    chatgpt_contents_group[group_id] = chat_history
-                    #将回复发送
-                    return await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"](gpt_response))
+                        #用户新消息加入历史对话
+                        chat_history.append({"role": "user", "content": message_content})
+                        #调用ChatGPT API
+                        #gpt_response = await call_chatgpt_api(chat_history)
+                        gpt_response = await call_groq_api(chat_history)
+                        #将ChatGPT的回复加入历史
+                        chat_history.append({"role": "assistant", "content": gpt_response})
+                        #保存更新后的对话历史
+                        chatgpt_contents_group[group_id] = chat_history
+                        #将回复发送
+                        return await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"](gpt_response))
 
             # return await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"](message_content)) 
             return None
-        if message["post_type"] == "private":
+        if message["message_type"] == "private":
             user_id = message['user_id']
             message_id = message['message_id']
             message_content = await bot_interfaces["encode_message_to_CQ"](message['message'])
             print(message_content)
             
-            if user_id in chatgpt_contents_private:
-                chat_history = chatgpt_contents_private[user_id]
-                chat_history.append({"role": "user", "content": message_content})
-                gpt_response = await call_chatgpt_api(chat_history)
-                chat_history.append({"role": "assistant", "content": gpt_response})
-                return await bot_interfaces["send_private_message"](ws, user_id, await bot_interfaces["decode_CQ_to_message"](gpt_response))
-
+            if str(user_id) in chatgpt_contents_private:
+                print("01")
+                chat_history = chatgpt_contents_private[str(user_id)]
             else:
+                print("02")
                 chat_history = []
                 if user_id in bot.super_users:
-                    chat_history.append(
-                        {"role": "system", 
-                        "content": roles.Murasame_goshujin_role
-                        }
-                    )
+                    system_role = roles.get_Murasame_goshujin_role(user_id,bot_interfaces["bot_qq"])
                 else:
-                    chat_history.append(
+                    system_role = roles.get_Murasame_customs_role(user_id,bot_interfaces["bot_qq"])
+                chat_history.append(
                         {"role": "system", 
-                        "content": roles.Murasame_customs_role
+                        "content": system_role
                         }
                     )
+                    
+            chat_history.append({"role": "user", "content": message_content})
+            gpt_response = await call_groq_api(chat_history)
+            chat_history.append({"role": "assistant", "content": gpt_response})
+            chatgpt_contents_private[str(user_id)] = chat_history
+            return await bot_interfaces["send_private_message"](ws, user_id, await bot_interfaces["decode_CQ_to_message"](gpt_response))
 
-#消息格式示例     
+#消息格式示例 group    
 # {   'message_type': 'group',
 #     'sub_type': 'normal',
 #     'message_id': 347984696, 
@@ -159,3 +174,18 @@ async def execute_function(ws, message):
 #     'self_id': 2335937889, 
 #     'post_type': 'message'
 # }
+
+# private
+# {   'message_type': 'private', 
+#     'sub_type': 'friend', 
+#     'message_id': 10042167, 
+#     'user_id': 1000000002, 
+#     'message': [{'type': 'text', 'data': {'text': '你好'}}], 
+#     'raw_message': '你好', 
+#     'font': 0, 
+#     'sender': {'user_id': 1000000002, 'nickname': '元气のNeko', 'sex': 'unknown'}, 
+#     'target_id': 2335937889, 
+#     'time': 1728646732, 
+#     'self_id': 2335937889, 
+#     'post_type': 'message'
+#  }

@@ -219,20 +219,26 @@ async def decode_CQ_to_message(message):
             i = j
     return decoded_message
 
-interfaces = {
-    "send_group_message": send_group_message,
-    "send_private_message": send_private_message,
-    "withdraw_group_message": withdraw_group_message,
-    "get_stranger_info": get_stranger_info,
-    "encode_message_to_CQ": encode_message_to_CQ,
-    "encode_message_to_CQ_without_At_self_and_Image": encode_message_to_CQ_without_At_self_and_Image,
-    "decode_CQ_to_message": decode_CQ_to_message,
+interfaces = None
 
-}
+def set_interfaces():
+    global interfaces
+    interfaces= {
+        "send_group_message": send_group_message,
+        "send_private_message": send_private_message,
+        "withdraw_group_message": withdraw_group_message,
+        "get_stranger_info": get_stranger_info,
+        "encode_message_to_CQ": encode_message_to_CQ,
+        "encode_message_to_CQ_without_At_self_and_Image": encode_message_to_CQ_without_At_self_and_Image,
+        "decode_CQ_to_message": decode_CQ_to_message,
+        "bot_qq": bot_qq,
+        
+    }
 
 
 handlers = None
 async def hot_reload(handler_file):
+    set_interfaces()
     global handlers
     if hasattr(handler_file, "handler_release"): await handlers.handler_release()
     try:
@@ -313,14 +319,14 @@ async def serve():
             print("[Lagrange Core]Failed to connect to server")
             return
         
-        #await hot_reload("handlers")
+        await hot_reload("handlers")
         await serve_forever(ws)
        
 bot_workpath = os.path.join(os.path.dirname(__file__), "bot_workpath")
 
 async def server():
     print("[Lagrange Core]Starting server")
-    await hot_reload("handlers")
+    #await hot_reload("handlers")
     while not server_close_signal:
         try:
             await serve()
