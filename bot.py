@@ -16,7 +16,7 @@ websocket_url = f"ws://{Host}:{Port}"
 
 bot_qq = 0
 
-super_users = ["1000000002"]
+super_users = [1000000002]
 
 echo_counter = 0
 echo_dict = {}
@@ -227,7 +227,6 @@ interfaces = {
     "encode_message_to_CQ": encode_message_to_CQ,
     "encode_message_to_CQ_without_At_self_and_Image": encode_message_to_CQ_without_At_self_and_Image,
     "decode_CQ_to_message": decode_CQ_to_message,
-    "bot_qq": bot_qq
 
 }
 
