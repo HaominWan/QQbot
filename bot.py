@@ -314,6 +314,7 @@ async def serve():
             print("[Lagrange Core]Failed to connect to server")
             return
         
+        #await hot_reload("handlers")
         await serve_forever(ws)
        
 bot_workpath = os.path.join(os.path.dirname(__file__), "bot_workpath")
