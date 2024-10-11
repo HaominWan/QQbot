@@ -15,7 +15,6 @@ Port = "8080"
 websocket_url = f"ws://{Host}:{Port}"
 
 bot_qq = 0
-bot_ready = asyncio.Event()
 
 super_users = ["1000000002"]
 
@@ -227,8 +226,8 @@ interfaces = {
     "get_stranger_info": get_stranger_info,
     "encode_message_to_CQ": encode_message_to_CQ,
     "encode_message_to_CQ_without_At_self_and_Image": encode_message_to_CQ_without_At_self_and_Image,
-    "decode_CQ_to_message": decode_CQ_to_message
-    
+    "decode_CQ_to_message": decode_CQ_to_message,
+    "bot_qq": bot_qq
 
 }
 
@@ -310,6 +309,7 @@ async def serve():
             bot_qq = bot_info["self_id"]
             print("[Lagrange Core]Bot QQ:", bot_qq)
             print("[Lagrange Core]Connected to server")
+
         else:
             print("[Lagrange Core]Failed to connect to server")
             return

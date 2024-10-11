@@ -2,16 +2,42 @@ import asyncio
 import gemini
 from config import *
 import bot
-import openai
+import os
+from openai import OpenAI
 
 bot_interfaces = {}
 chatgpt_contents = {}
 async def handler_init(interfaces):
     global bot_interfaces
     bot_interfaces = interfaces
+    bot.bot_qq = bot_interfaces["bot_qq"]
     
 async def handler_release():
     pass
+
+async def call_chatgpt_api(chat_history):
+
+            OpenAI(api_key = OPENAI_API_KEY)
+            print(OPENAI_API_KEY)
+            try:
+                client = OpenAI(
+                     organization="org-jwlTKLr5o8qaeGU1OL0xgt5a",
+                     project="proj_LKwx8mUG90NATGpm7Ub5TB9H"
+                )
+
+                response = client.chat.completions.create(
+                     model="gpt-3.5-turbo", 
+                     messages=chat_history,
+                    temperature=0.7,
+                )
+                print(response)
+                return response["choices"][0]["message"]["content"]
+            
+            except Exception as e:
+                error_message = f"Error calling ChatGPT API: {str(e)}"
+                print(error_message)  # 打印日志
+                return "抱歉，我暂时无法处理你的请求。"  # 返回给用户的默认错误消息
+            
 async def execute_function(ws, message):
     if message['post_type'] == 'meta_event':
         return
@@ -25,11 +51,11 @@ async def execute_function(ws, message):
             message_id = message['message_id']
             message_content = await bot_interfaces["encode_message_to_CQ"](message['message'])
             print(message_content)
-            print(f"self_id: {message['self_id']}, bot_qq: {bot.bot_qq}")
+            print(message["message"][0]["type"] == 'at')
 
             if message["message"][0]["type"] == "at":
-                print(f"self_id: {message['self_id']}, bot_qq: {bot.bot_qq}")  # 从bot模块访问最新的bot_qq
-                if message['self_id'] == bot.bot_qq:
+                print(str(message['self_id']) == message["message"][0]["data"]["qq"])
+                if str(message['self_id']) == message["message"][0]["data"]["qq"]:
                     #获取当前群聊上下文
                     print("enter ai mode")
                     if group_id in chatgpt_contents:
@@ -50,24 +76,8 @@ async def execute_function(ws, message):
 
             # return await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"](message_content)) 
             return None
-            
-        async def call_chatgpt_api(chat_history):
 
-            openai.api_key = OPENAI_API_KEY
-            
-            try:
-                response = openai.ChatCompletion.create(
-                    model="gpt-3.5-turbo",
-                    message=chat_history
-                )
-                print(response)
-                return response["choices"][0]["message"]["content"]
-            
-            except Exception as e:
-                error_message = f"Error calling ChatGPT API: {str(e)}"
-                print(error_message)  # 打印日志，可以替换为实际的日志记录方式
-                return "抱歉，我暂时无法处理你的请求。"  # 返回给用户的默认错误消息
-        
+#消息格式示例     
 # {   'message_type': 'group',
 #     'sub_type': 'normal',
 #     'message_id': 347984696, 
