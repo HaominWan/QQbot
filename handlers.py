@@ -6,70 +6,72 @@ import os
 from openai import OpenAI
 from groq import Groq
 import roles
+from models import *
+from api import *
 
-class User:
-    def __init__(self, user_id, is_super_user, bot_qq):
-        self.user_id = user_id
-        self.is_super_user = is_super_user
-        self.chat_history = [
-            {
-                "role": "system",
-                "content": roles.get_Murasame_goshujin_role(user_id,bot_qq) if is_super_user else roles.get_Murasame_customs_role(user_id,bot_qq)
-            }
-        ]
+# class User:
+#     def __init__(self, user_id, is_super_user, bot_qq):
+#         self.user_id = user_id
+#         self.is_super_user = is_super_user
+#         self.chat_history = [
+#             {
+#                 "role": "system",
+#                 "content": roles.get_Murasame_goshujin_role(user_id,bot_qq) if is_super_user else roles.get_Murasame_customs_role(user_id,bot_qq)
+#             }
+#         ]
 
-    def get_user_id(self):
-        return self.user_id
+#     def get_user_id(self):
+#         return self.user_id
     
-    def get_is_super_user(self):
-        return self.is_super_user
+#     def get_is_super_user(self):
+#         return self.is_super_user
     
-    def get_chat_history(self):
-        return self.chat_history
+#     def get_chat_history(self):
+#         return self.chat_history
 
-    def add_message(self, role, content):
-        self.chat_history.append({"role": role, "content": content})
+#     def add_message(self, role, content):
+#         self.chat_history.append({"role": role, "content": content})
 
-    def get_chat_history(self):
-        return self.chat_history
+#     def get_chat_history(self):
+#         return self.chat_history
     
-    async def handle_message(self, message_content):
-        self.add_message("user", message_content)
-        gpt_response = await call_groq_api(self.chat_history)
-        self.add_message("assistant", gpt_response)
-        return gpt_response
+#     async def handle_message(self, message_content):
+#         self.add_message("user", message_content)
+#         gpt_response = await call_groq_api(self.chat_history)
+#         self.add_message("assistant", gpt_response)
+#         return gpt_response
     
-class Group:
-    def __init__(self, group_id, bot_qq):
-        self.group_id = group_id
-        self.users = {}
-        self.chat_history = []
-        self.bot_qq = bot_qq
+# class Group:
+#     def __init__(self, group_id, bot_qq):
+#         self.group_id = group_id
+#         self.users = {}
+#         self.chat_history = []
+#         self.bot_qq = bot_qq
     
-    def add_message(self, role, message_content, user_id = None):
-        message_content = "by " + str(user_id) + ": " + message_content if user_id else message_content
-        self.chat_history.append({"role": role, "content": message_content})
+#     def add_message(self, role, message_content, user_id = None):
+#         message_content = "by " + str(user_id) + ": " + message_content if user_id else message_content
+#         self.chat_history.append({"role": role, "content": message_content})
 
-    def get_chat_history(self):
-        return self.chat_history
+#     def get_chat_history(self):
+#         return self.chat_history
     
-    async def handle_message(self, user_id, message_content):
-        if user_id in bot.super_users:
-            system_role = roles.get_Murasame_goshujin_role(user_id, self.bot_qq)
-        else:
-            system_role = roles.get_Murasame_customs_role(user_id, self.bot_qq)
+#     async def handle_message(self, user_id, message_content):
+#         if user_id in bot.super_users:
+#             system_role = roles.get_Murasame_goshujin_role(user_id, self.bot_qq)
+#         else:
+#             system_role = roles.get_Murasame_customs_role(user_id, self.bot_qq)
             
-        #self.add_message("system", system_role)
+#         #self.add_message("system", system_role)
 
-        self.add_message("user", message_content, user_id)
+#         self.add_message("user", message_content, user_id)
 
-        tmp_chat_history = self.chat_history.copy()
-        tmp_chat_history.insert(0, {"role": "system", "content": system_role})
-        gpt_response = await call_groq_api(tmp_chat_history)
+#         tmp_chat_history = self.chat_history.copy()
+#         tmp_chat_history.insert(0, {"role": "system", "content": system_role})
+#         gpt_response = await call_groq_api(tmp_chat_history)
 
-        self.add_message("assistant", gpt_response)
+#         self.add_message("assistant", gpt_response)
 
-        return gpt_response
+#         return gpt_response
  
 async def handler_init(interfaces):
     global bot_interfaces
@@ -78,55 +80,55 @@ async def handler_init(interfaces):
 async def handler_release():
     pass
 
-async def call_groq_api(chat_history):
-     try:
-        client = Groq(
-            api_key=GROQ_API_KEY,
-        )
+# async def call_groq_api(chat_history):
+#      try:
+#         client = Groq(
+#             api_key=GROQ_API_KEY,
+#         )
         
-        response = client.chat.completions.create(
-            messages=chat_history,
-            model="llama-3.2-90b-text-preview",#llama-3.2-11b-text-preview llama-3.2-11b-vision-preview llama-3.2-90b-text-preview gemma2-9b-it llama-3.1.70b-versatile llama-3.2-90b-text-preview
-            temperature=1,
-            top_p=1,
-            stream=True,
-            stop=None,
-        )
+#         response = client.chat.completions.create(
+#             messages=chat_history,
+#             model="llama-3.2-90b-text-preview",#llama-3.2-11b-text-preview llama-3.2-11b-vision-preview llama-3.2-90b-text-preview gemma2-9b-it llama-3.1.70b-versatile llama-3.2-90b-text-preview
+#             temperature=1,
+#             top_p=1,
+#             stream=True,
+#             stop=None,
+#         )
 
-        full_response = ""
-        for chunk in response:
-            if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
-                full_response += chunk.choices[0].delta.content
+#         full_response = ""
+#         for chunk in response:
+#             if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
+#                 full_response += chunk.choices[0].delta.content
         
-        return full_response
+#         return full_response
      
-     except Exception as e:
-         error_message = f"Error calling Groq API: {str(e)}"
-         print(error_message)  # 打印日志
-         return "抱歉，我暂时无法处理你的请求。"
+#      except Exception as e:
+#          error_message = f"Error calling Groq API: {str(e)}"
+#          print(error_message)  # 打印日志
+#          return "抱歉，我暂时无法处理你的请求。"
      
-async def call_chatgpt_api(chat_history):
+# async def call_chatgpt_api(chat_history):
 
-            OpenAI(api_key = OPENAI_API_KEY)
-            print(OPENAI_API_KEY)
-            try:
-                client = OpenAI(
-                     organization="org-jwlTKLr5o8qaeGU1OL0xgt5a",
-                     project="proj_LKwx8mUG90NATGpm7Ub5TB9H"
-                )
+#             OpenAI(api_key = OPENAI_API_KEY)
+#             print(OPENAI_API_KEY)
+#             try:
+#                 client = OpenAI(
+#                      organization="org-jwlTKLr5o8qaeGU1OL0xgt5a",
+#                      project="proj_LKwx8mUG90NATGpm7Ub5TB9H"
+#                 )
 
-                response = client.chat.completions.create(
-                     model="gpt-3.5-turbo", 
-                     messages=chat_history,
-                    temperature=0.7,
-                )
-                print(response)
-                return response["choices"][0]["message"]["content"]
+#                 response = client.chat.completions.create(
+#                      model="gpt-3.5-turbo", 
+#                      messages=chat_history,
+#                     temperature=0.7,
+#                 )
+#                 print(response)
+#                 return response["choices"][0]["message"]["content"]
             
-            except Exception as e:
-                error_message = f"Error calling ChatGPT API: {str(e)}"
-                print(error_message)  # 打印日志
-                return "抱歉，我暂时无法处理你的请求。"  # 返回给用户的默认错误消息
+#             except Exception as e:
+#                 error_message = f"Error calling ChatGPT API: {str(e)}"
+#                 print(error_message)  # 打印日志
+#                 return "抱歉，我暂时无法处理你的请求。"  # 返回给用户的默认错误消息
 
 #启用群的列表
 test_group = [100000003, 100000001, 1000000001, 100000002] #第二团体100000003 *100000001 西工大·赣1000000001 cs群( computer science 100000002
