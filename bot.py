@@ -28,6 +28,28 @@ crash_signal = False
 def test_if_super_user(user_id):
     return str(user_id) in super_users
 
+async def get_message_by_id(ws:websockets.WebSocketClientProtocol, message_id):
+    global echo_counter
+    echo_counter += 1
+    self_echo = str(echo_counter)
+    json_data = {
+        "action": "get_msg",
+        "params": {
+            "message_id": message_id
+        },
+        "echo": self_echo
+    }
+    await ws.send(json.dumps(json_data))
+
+    while self_echo not in echo_dict and not crash_signal:
+        await asyncio.sleep(0.1)
+    response = echo_dict[self_echo]
+    del echo_dict[self_echo]
+    print("[Lagrange Core]Response:",response)
+    if "data" in response:
+        return response["data"]
+    return None
+
 async def get_stranger_info(ws:websockets.WebSocketClientProtocol, user_id):
     global echo_counter
     echo_counter += 1
@@ -224,6 +246,7 @@ interfaces = None
 def set_interfaces():
     global interfaces
     interfaces= {
+        "get_message_by_id": get_message_by_id,
         "send_group_message": send_group_message,
         "send_private_message": send_private_message,
         "withdraw_group_message": withdraw_group_message,
