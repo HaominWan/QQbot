@@ -177,6 +177,7 @@ async def execute_function(ws, message):
             elif message_content.startswith(".draw"):
                 draw_data = message_content[6:].strip()
                 image_data = await drawing.generate(draw_data)
+                image_cq_code = f"[CQ:image,file={image_data},type=show,id=40000]"
                 try:
                     await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"](image_data))
                 except:
