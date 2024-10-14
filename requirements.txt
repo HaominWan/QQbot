@@ -4,3 +4,5 @@ google
 websockets
 aiohttp
 requests
+chardet
+typst
