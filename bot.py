@@ -27,7 +27,7 @@ crash_signal = False
 
 
 def test_if_super_user(user_id):
-    return str(user_id) in super_users
+    return user_id in super_users
 
 async def get_message_by_id(ws:websockets.WebSocketClientProtocol, message_id):
     global echo_counter
@@ -255,6 +255,7 @@ def set_interfaces():
         "encode_message_to_CQ": encode_message_to_CQ,
         "encode_message_to_CQ_without_At_self_and_Image": encode_message_to_CQ_without_At_self_and_Image,
         "decode_CQ_to_message": decode_CQ_to_message,
+        "test_if_super_user": test_if_super_user,
         "bot_qq": bot_qq,
         
     }

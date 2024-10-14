@@ -5,7 +5,7 @@ import time
 import typst
 
 def render(typst_text:str)->str:
-    typst_text = "#set page(width: auto, height: auto, margin: (x: 10pt, y: 10pt))\n" + typst_text
+    typst_text = "#set page(width: auto, height: auto, margin: (x: 10pt, y: 10pt), page size: auto)\n" + typst_text
     if sys.platform == "win32" or sys.platform == "win64":
         temp_file = 'D:/QQbot/Bot/tmp/' + str(time.time()) + '.typ'
         try:

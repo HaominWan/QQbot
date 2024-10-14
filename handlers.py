@@ -5,6 +5,7 @@ import os
 import roles
 import base64
 import chardet
+import requests
 
 from groq import Groq
 from openai import OpenAI
@@ -12,70 +13,6 @@ from models import *
 from api import *
 from config import *
 from plugins import *
-
-# class User:
-#     def __init__(self, user_id, is_super_user, bot_qq):
-#         self.user_id = user_id
-#         self.is_super_user = is_super_user
-#         self.chat_history = [
-#             {
-#                 "role": "system",
-#                 "content": roles.get_Murasame_goshujin_role(user_id,bot_qq) if is_super_user else roles.get_Murasame_customs_role(user_id,bot_qq)
-#             }
-#         ]
-
-#     def get_user_id(self):
-#         return self.user_id
-    
-#     def get_is_super_user(self):
-#         return self.is_super_user
-    
-#     def get_chat_history(self):
-#         return self.chat_history
-
-#     def add_message(self, role, content):
-#         self.chat_history.append({"role": role, "content": content})
-
-#     def get_chat_history(self):
-#         return self.chat_history
-    
-#     async def handle_message(self, message_content):
-#         self.add_message("user", message_content)
-#         gpt_response = await call_groq_api(self.chat_history)
-#         self.add_message("assistant", gpt_response)
-#         return gpt_response
-    
-# class Group:
-#     def __init__(self, group_id, bot_qq):
-#         self.group_id = group_id
-#         self.users = {}
-#         self.chat_history = []
-#         self.bot_qq = bot_qq
-    
-#     def add_message(self, role, message_content, user_id = None):
-#         message_content = "by " + str(user_id) + ": " + message_content if user_id else message_content
-#         self.chat_history.append({"role": role, "content": message_content})
-
-#     def get_chat_history(self):
-#         return self.chat_history
-    
-#     async def handle_message(self, user_id, message_content):
-#         if user_id in bot.super_users:
-#             system_role = roles.get_Murasame_goshujin_role(user_id, self.bot_qq)
-#         else:
-#             system_role = roles.get_Murasame_customs_role(user_id, self.bot_qq)
-            
-#         #self.add_message("system", system_role)
-
-#         self.add_message("user", message_content, user_id)
-
-#         tmp_chat_history = self.chat_history.copy()
-#         tmp_chat_history.insert(0, {"role": "system", "content": system_role})
-#         gpt_response = await call_groq_api(tmp_chat_history)
-
-#         self.add_message("assistant", gpt_response)
-
-#         return gpt_response
  
 async def handler_init(interfaces):
     global bot_interfaces
@@ -84,55 +21,6 @@ async def handler_init(interfaces):
 async def handler_release():
     pass
 
-# async def call_groq_api(chat_history):
-#      try:
-#         client = Groq(
-#             api_key=GROQ_API_KEY,
-#         )
-        
-#         response = client.chat.completions.create(
-#             messages=chat_history,
-#             model="llama-3.2-90b-text-preview",#llama-3.2-11b-text-preview llama-3.2-11b-vision-preview llama-3.2-90b-text-preview gemma2-9b-it llama-3.1.70b-versatile llama-3.2-90b-text-preview
-#             temperature=1,
-#             top_p=1,
-#             stream=True,
-#             stop=None,
-#         )
-
-#         full_response = ""
-#         for chunk in response:
-#             if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
-#                 full_response += chunk.choices[0].delta.content
-        
-#         return full_response
-     
-#      except Exception as e:
-#          error_message = f"Error calling Groq API: {str(e)}"
-#          print(error_message)  # 打印日志
-#          return "抱歉，我暂时无法处理你的请求。"
-     
-# async def call_chatgpt_api(chat_history):
-
-#             OpenAI(api_key = OPENAI_API_KEY)
-#             print(OPENAI_API_KEY)
-#             try:
-#                 client = OpenAI(
-#                      organization="org-jwlTKLr5o8qaeGU1OL0xgt5a",
-#                      project="proj_LKwx8mUG90NATGpm7Ub5TB9H"
-#                 )
-
-#                 response = client.chat.completions.create(
-#                      model="gpt-3.5-turbo", 
-#                      messages=chat_history,
-#                     temperature=0.7,
-#                 )
-#                 print(response)
-#                 return response["choices"][0]["message"]["content"]
-            
-#             except Exception as e:
-#                 error_message = f"Error calling ChatGPT API: {str(e)}"
-#                 print(error_message)  # 打印日志
-#                 return "抱歉，我暂时无法处理你的请求。"  # 返回给用户的默认错误消息
 
 #启用群的列表
 test_group = [100000003, 100000001, 1000000001, 100000002] #第二团体100000003 *100000001 西工大·赣1000000001 cs群( computer science 100000002
@@ -152,17 +40,17 @@ async def execute_function(ws, message):
             print(message["message"][0]["type"] == 'at')
             
             if message_content.startswith(".help"):
-                help_message = '''
+                help_message = '''===================
 .help           插件信息
 .reset          重置对话
 .draw           AI绘图
 .typ/.typst     Typst绘图
-'''
+==================='''
                 await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"](help_message))
 
             elif message_content.startswith(".reset"):
                 group = Group(group_id, bot_interfaces["bot_qq"])
-                if bot_interfaces["if_super_user"](user_id):
+                if bot_interfaces["test_if_super_user"](user_id):
                     try:
                         group.chat_history = []
                         reset_message = "重置成功"
@@ -170,16 +58,17 @@ async def execute_function(ws, message):
                     except:
                         reset_message = "重置失败"
                         await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"](reset_message))
-                    else:
-                        reset_message = "抱歉，您没有权限重置对话"
-                        await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"](reset_message))
+                else:
+                    reset_message = "抱歉，您没有权限重置对话"
+                    await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"](reset_message))
 
             elif message_content.startswith(".draw"):
                 draw_data = message_content[6:].strip()
-                image_data = await drawing.generate(draw_data)
-                image_cq_code = f"[CQ:image,file={image_data},type=show,id=40000]"
+                image_base64 = await drawing.save_image_and_convert_to_base64(draw_data)
+                
+                image_cq_code = f"[CQ:image,file=base64://{image_base64},type=show,id=40000]"
                 try:
-                    await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"](image_data))
+                    await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"](image_cq_code))
                 except:
                     await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"]("抱歉，目前无法为您提供绘图服务，请尝试使用其他指令。"))
                     
@@ -221,49 +110,7 @@ async def execute_function(ws, message):
                     group = Group(group_id, bot_interfaces["bot_qq"])
                     gpt_response = await group.handle_message(user_id, message_content)
                     return await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"](gpt_response))
-                    # if user_id in bot.super_users:
-                    #     if str(user_id) in chatgpt_contents_private:
-                    #         chat_history = chatgpt_contents_private[str(user_id)]
-                    #     else:
-                    #         chat_history = []
-                    #         chat_history.append(
-                    #             {
-                    #                 "role": "system", 
-                    #                 "content": roles.get_Murasame_goshujin_role(user_id,bot_interfaces["bot_qq"])
-                    #             }
-                    #         )
-
-                    #     chat_history.append({"role": "user", "content": message_content})
-                    #     gpt_response = await call_groq_api(chat_history)
-                    #     chat_history.append({"role": "assistant", "content": gpt_response})
-                    #     chatgpt_contents_private[str(user_id)] = chat_history
-                    #     return await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"](gpt_response))
-                        
-                    # else:
-                    # #获取当前群聊上下文
-                    #     if group_id in chatgpt_contents_group:
-                    #         chat_history = chatgpt_contents_group[group_id]
-                    #     else:
-                    #         chat_history = []
-                    #         chat_history.append(
-                    #                 {"role": "system", 
-                    #                 "content": roles.get_Murasame_customs_role(user_id,bot_interfaces["bot_qq"])
-                    #                 }
-                    #             )
-                    
-                    #     #用户新消息加入历史对话
-                    #     chat_history.append({"role": "user", "content": message_content})
-                    #     #调用ChatGPT API
-                    #     #gpt_response = await call_chatgpt_api(chat_history)
-                    #     gpt_response = await call_groq_api(chat_history)
-                    #     #将ChatGPT的回复加入历史
-                    #     chat_history.append({"role": "assistant", "content": gpt_response})
-                    #     #保存更新后的对话历史
-                    #     chatgpt_contents_group[group_id] = chat_history
-                    #     #将回复发送
-                    #     return await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"](gpt_response))
-
-            # return await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"](message_content)) 
+ 
             return None
         if message["message_type"] == "private":
             user_id = message['user_id']
@@ -272,12 +119,12 @@ async def execute_function(ws, message):
             print(message_content)
 
             if message_content.startswith(".help"):
-                help_message = '''
+                help_message = '''===================
 .help           插件信息
 .reset          重置对话
 .draw           AI绘图
 .typ/.typst     Typst绘图
-'''
+==================='''
                 await bot_interfaces["send_private_message"](ws, user_id, await bot_interfaces["decode_CQ_to_message"](help_message))
                 
             elif message_content.startswith(".reset"):
@@ -292,7 +139,8 @@ async def execute_function(ws, message):
                 pass
             elif message_content.startswith(".draw"):
                 draw_data = message_content[6:].strip()
-                image_data = await drawing.generate(draw_data)
+                draw_data = message_content[6:].strip()
+                image_base64 = await drawing.save_image_and_convert_to_base64(draw_data)
                 try:
                     await bot_interfaces["send_private_message"](ws, user_id, await bot_interfaces["decode_CQ_to_message"](image_data))
                 except:
@@ -316,28 +164,7 @@ async def execute_function(ws, message):
                 user = User(user_id, user_id in bot.super_users, bot_interfaces["bot_qq"])
                 gpt_response = await user.handle_message(message_content)
                 return await bot_interfaces["send_private_message"](ws, user_id, await bot_interfaces["decode_CQ_to_message"](gpt_response))
-            
-            # if str(user_id) in chatgpt_contents_private:
-            #     print("01")
-            #     chat_history = chatgpt_contents_private[str(user_id)]
-            # else:
-            #     print("02")
-            #     chat_history = []
-            #     if user_id in bot.super_users:
-            #         system_role = roles.get_Murasame_goshujin_role(user_id,bot_interfaces["bot_qq"])
-            #     else:
-            #         system_role = roles.get_Murasame_customs_role(user_id,bot_interfaces["bot_qq"])
-            #     chat_history.append(
-            #             {"role": "system", 
-            #             "content": system_role
-            #             }
-            #         )
-                    
-            # chat_history.append({"role": "user", "content": message_content})
-            # gpt_response = await call_groq_api(chat_history)
-            # chat_history.append({"role": "assistant", "content": gpt_response})
-            # chatgpt_contents_private[str(user_id)] = chat_history
-            # return await bot_interfaces["send_private_message"](ws, user_id, await bot_interfaces["decode_CQ_to_message"](gpt_response))
+
 
 #消息格式示例 group    
 # {   'message_type': 'group',
