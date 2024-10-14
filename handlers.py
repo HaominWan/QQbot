@@ -1,5 +1,6 @@
 import asyncio
 import gemini
+import drawing
 from config import *
 import bot
 import os
@@ -8,6 +9,7 @@ from groq import Groq
 import roles
 from models import *
 from api import *
+
 
 # class User:
 #     def __init__(self, user_id, is_super_user, bot_qq):
