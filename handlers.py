@@ -1,15 +1,15 @@
 import asyncio
 import gemini
-import drawing
-from config import *
 import bot
 import os
-from openai import OpenAI
-from groq import Groq
 import roles
+
+from groq import Groq
+from openai import OpenAI
 from models import *
 from api import *
-
+from config import *
+from plugins import *
 
 # class User:
 #     def __init__(self, user_id, is_super_user, bot_qq):
@@ -148,8 +148,47 @@ async def execute_function(ws, message):
             message_content = await bot_interfaces["encode_message_to_CQ"](message['message'])
             print(message_content)
             print(message["message"][0]["type"] == 'at')
+            
+            if message_content.startswith(".help"):
+                help_message = '''
+.help           插件信息
+.reset          重置对话
+.draw           AI绘图
+.typ/.typst     Typst绘图
+'''
+                await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"](help_message))
 
-            if message["message"][0]["type"] == "reply" and message["message"][2]["type"] == "at":
+            elif message_content.startswith(".reset"):
+                group = Group(group_id, bot_interfaces["bot_qq"])
+                if bot_interfaces["if_super_user"](user_id):
+                    try:
+                        group.chat_history = []
+                        reset_message = "重置成功"
+                        await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"](reset_message))
+                    except:
+                        reset_message = "重置失败"
+                        await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"](reset_message))
+                    else:
+                        reset_message = "抱歉，您没有权限重置对话"
+                        await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"](reset_message))
+
+            elif message_content.startswith(".draw"):
+                draw_data = message_content[6:].strip()
+                image_data = await drawing.generate(draw_data)
+                try:
+                    await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"](image_data))
+                except:
+                    await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"]("抱歉，目前无法为您提供绘图服务，请尝试使用其他指令。"))
+                    
+            elif message_content.startswith(".typ") or message_content.startswith(".typst"):
+                typst_data = message_content[5:].strip() if message_content.startswith(".typ ") else message_content[7:].strip()
+                image_data = await typst.render_async(typst_data)
+                try:
+                    await bot_interfaces["send_private_message"](ws, user_id, image_data)
+                except:
+                    await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"]("抱歉，目前无法为您提供Typst渲染服务，请尝试使用其他指令。"))
+
+            elif message["message"][0]["type"] == "reply" and message["message"][2]["type"] == "at":
                 if str(bot_interfaces["bot_qq"]) == message["message"][2]["data"]["qq"]:
                     print("enter ai mode")
 
@@ -221,9 +260,44 @@ async def execute_function(ws, message):
             message_content = await bot_interfaces["encode_message_to_CQ"](message['message'])
             print(message_content)
 
-            user = User(user_id, user_id in bot.super_users, bot_interfaces["bot_qq"])
-            gpt_response = await user.handle_message(message_content)
-            return await bot_interfaces["send_private_message"](ws, user_id, await bot_interfaces["decode_CQ_to_message"](gpt_response))
+            if message_content.startswith(".help"):
+                help_message = '''
+.help           插件信息
+.reset          重置对话
+.draw           AI绘图
+.typ/.typst     Typst绘图
+'''
+                await bot_interfaces["send_private_message"](ws, user_id, await bot_interfaces["decode_CQ_to_message"](help_message))
+                
+            elif message_content.startswith(".reset"):
+                user = User(user_id, bot_interfaces["test_if_super_user"](user_id), bot_interfaces["bot_qq"])
+                try:
+                    user.chat_history = []
+                    reset_message = "重置成功"
+                    await bot_interfaces["send_private_message"](ws, user_id, await bot_interfaces["decode_CQ_to_message"](reset_message))
+                except:
+                    reset_message = "重置失败"
+                    await bot_interfaces["send_private_message"](ws, user_id, await bot_interfaces["decode_CQ_to_message"](reset_message))
+                pass
+            elif message_content.startswith(".draw"):
+                draw_data = message_content[6:].strip()
+                image_data = await drawing.generate(draw_data)
+                try:
+                    await bot_interfaces["send_private_message"](ws, user_id, await bot_interfaces["decode_CQ_to_message"](image_data))
+                except:
+                    await bot_interfaces["send_private_message"](ws, user_id, await bot_interfaces["decode_CQ_to_message"]("抱歉，目前无法为您提供绘图服务，请尝试使用其他指令。"))
+                    
+            elif message_content.startswith(".typ") or message_content.startswith(".typst"):
+                typst_data = message_content[5:].strip() if message_content.startswith(".typ ") else message_content[7:].strip()
+                image_data = await typst.render_async(typst_data)
+                try:
+                    await bot_interfaces["send_private_message"](ws, user_id, image_data)
+                except:
+                    await bot_interfaces["send_private_message"](ws, user_id, await bot_interfaces["decode_CQ_to_message"]("抱歉，目前无法为您提供Typst渲染服务，请尝试使用其他指令。"))
+            else:
+                user = User(user_id, user_id in bot.super_users, bot_interfaces["bot_qq"])
+                gpt_response = await user.handle_message(message_content)
+                return await bot_interfaces["send_private_message"](ws, user_id, await bot_interfaces["decode_CQ_to_message"](gpt_response))
             
             # if str(user_id) in chatgpt_contents_private:
             #     print("01")

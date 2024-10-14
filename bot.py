@@ -7,8 +7,9 @@ import gemini
 import time
 import traceback
 import os
-
 import importlib
+
+from plugins import *
 
 Host = "127.0.0.1"
 Port = "8080"
