@@ -8,3 +8,4 @@ chardet
 typst
 markdown
 imgkit
+pymdown-extensions

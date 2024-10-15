@@ -65,7 +65,7 @@ async def handle_typst_message(message_content):
     if detected_encoding != 'utf-8':
         typst_data = typst_data.encode(detected_encoding).decode('utf-8')
     image_data = await render_async(typst_data)
-    image_base64 = base64.b64encode(image_data.encode('utf-8')).decode('utf-8')
+    image_base64 = base64.b64encode(image_data).decode('utf-8')
     image_cq_code = f"[CQ:image,file=base64://{image_base64},type=show,id=40000]"
 
     return image_cq_code

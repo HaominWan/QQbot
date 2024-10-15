@@ -78,7 +78,7 @@ async def execute_function(ws, message):
                     await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"]("抱歉，目前无法为您提供Typst渲染服务，请尝试使用其他指令。"))
 
             elif message_content.startswith(".md") or message_content.startswith('.markdown'):
-                image_cq_code = await handle_markdown_message(message_content)
+                image_cq_code = await markdown.handle_markdown_message(message_content)
                 try: 
                     await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"](image_cq_code))
                 except:
@@ -148,7 +148,7 @@ async def execute_function(ws, message):
                 except:
                     await bot_interfaces["send_private_message"](ws, user_id, await bot_interfaces["decode_CQ_to_message"]("抱歉，目前无法为您提供Typst渲染服务，请尝试使用其他指令。"))
             elif message_content.startswith(".md") or message_content.startswith('.markdown'):
-                image_cq_code = await markdown_to_image(message_content)
+                image_cq_code = await markdown.handle_markdown_message(message_content)
                 try: 
                     await bot_interfaces["send_private_message"](ws, user_id, await bot_interfaces["decode_CQ_to_message"](image_cq_code))
                 except:

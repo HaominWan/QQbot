@@ -20,7 +20,8 @@ async def markdown_to_image(md_text: str) -> str:
 
     try:
         md_html = markdown.markdown(md_text, extensions=['extra', 'sane_lists', 'toc', 'tables', 'nl2br', 'attr_list', 'def_list', 'fenced_code', 'footnotes', 'meta', 'smarty', 'wikilinks', 'admonition', 'codehilite', 'legacy_attrs', 'legacy_em', 'md_in_html', 'pymdownx.arithmatex', 'pymdownx.betterem', 'pymdownx.caret', 'pymdownx.critic', 'pymdownx.details', 'pymdownx.inlinehilite', 'pymdownx.keys', 'pymdownx.magiclink', 'pymdownx.mark', 'pymdownx.smartsymbols', 'pymdownx.snippets', 'pymdownx.superfences', 'pymdownx.tasklist', 'pymdownx.tilde'])
-        imgkit.from_string(md_html, temp_file.replace('.md', '.jpg'))
+        config = imgkit.config(wkhtmltoimage='C:/Program Files/wkhtmltopdf/bin/wkhtmltoimage.exe')
+        imgkit.from_string(md_html, temp_file.replace('.md', '.jpg'), config = config)
         with open(temp_file.replace('.md', '.jpg'), 'rb') as img_file:
             img_data = img_file.read()
         img_base64 = base64.b64encode(img_data).decode('utf-8')
