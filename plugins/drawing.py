@@ -3,6 +3,8 @@ import json
 import traceback
 import asyncio
 import base64
+from PIL import Image
+from io import BytesIO
 
 from config import *
 from api import *
@@ -14,7 +16,21 @@ async def save_image_and_convert_to_base64(raw_message):
         image_url = await generate(raw_message, url_=True)
         
         if not image_url:
-            raise Exception("Failed to generate image URL")
+            # 下载图片并转换为 base64 编码
+            async with aiohttp.ClientSession() as session:
+                async with session.get(image_url) as response:
+                    image_data = await response.read()
+                    
+                    if not image_data:
+                        raise Exception("Failed to download image data")
+                    
+                    # 验证图像数据是否有效
+                    try:
+                        Image.open(BytesIO(image_data))
+                    except Exception:
+                        raise Exception("Invalid image data")
+                    
+                    base64_encoded_image = base64.b64encode(image_data).decode('utf-8')
         
         # 下载图片并转换为 base64 编码
         async with aiohttp.ClientSession() as session:

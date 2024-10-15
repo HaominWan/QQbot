@@ -7,7 +7,7 @@ import chardet
 import base64
 
 def render(typst_text:str)->str:
-    typst_text = "#set page(width: auto, height: auto, margin: (x: 10pt, y: 10pt))\n" + typst_text
+    typst_text = "#set page(width: auto, height: auto, margin: (x: 10pt, y: 10pt))\n" + f"#par[{typst_text}]\n"
     if sys.platform == "win32" or sys.platform == "win64":
         temp_file = 'D:/QQbot/Bot/tmp/' + str(time.time()) + '.typ'
         try:
@@ -52,9 +52,12 @@ def render(typst_text:str)->str:
     else:
         raise Exception("[Typst Renderer] Unsupported platform")
 
-async def render_async(typst_text:str)->str:
+async def render_async(typst_text: str) -> str:
     loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(None, render, typst_text)
+    result = await loop.run_in_executor(None, render, typst_text)
+    if isinstance(result, list):
+        result = ''.join(result)
+    return result
 
 async def handle_typst_message(message_content):
     typst_data = message_content[5:].strip() if message_content.startswith(".typ ") else message_content[7:].strip()
@@ -62,7 +65,7 @@ async def handle_typst_message(message_content):
     if detected_encoding != 'utf-8':
         typst_data = typst_data.encode(detected_encoding).decode('utf-8')
     image_data = await render_async(typst_data)
-    image_base64 = base64.b64encode(image_data).decode('utf-8')
+    image_base64 = base64.b64encode(image_data.encode('utf-8')).decode('utf-8')
     image_cq_code = f"[CQ:image,file=base64://{image_base64},type=show,id=40000]"
 
     return image_cq_code
