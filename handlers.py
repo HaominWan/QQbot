@@ -44,7 +44,8 @@ async def execute_function(ws, message):
 .help           插件信息
 .reset          重置对话
 .draw           AI绘图
-.typ/.typst     Typst绘图
+.typ/.typst     Typst渲染
+.md/.markdown   Markdown渲染
 ==================='''
                 await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"](help_message))
 
@@ -88,6 +89,21 @@ async def execute_function(ws, message):
                 except:
                     await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"]("抱歉，目前无法为您提供Typst渲染服务，请尝试使用其他指令。"))
 
+            elif message_content.startswith(".md") or message_content.startswith('.markdown'):
+                md_data = message_content[4:].strip() if message_content.startswith(".md ") else message_content[10:].strip()
+                detected_encoding = chardet.detect(md_data.encode())['encoding']
+                if detected_encoding != 'utf-8':
+                    md_data = md_data.encode(detected_encoding).decode('utf-8')
+
+                image_data = await markdown.markdown_to_image(md_data)
+                image_base64 = base64.b64encode(image_data).decode('utf-8')
+                image_cq_code = f"[CQ:image,file=base64://{image_base64},type=show,id=40000]"
+
+                try: 
+                    await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"](image_cq_code))
+                except:
+                    await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"]("抱歉，目前无法为您提供Markdown渲染服务，请尝试使用其他指令。"))  
+
             elif message["message"][0]["type"] == "reply" and message["message"][2]["type"] == "at":
                 if str(bot_interfaces["bot_qq"]) == message["message"][2]["data"]["qq"]:
                     print("enter ai mode")
@@ -123,7 +139,8 @@ async def execute_function(ws, message):
 .help           插件信息
 .reset          重置对话
 .draw           AI绘图
-.typ/.typst     Typst绘图
+.typ/.typst     Typst渲染
+.md/.markdown   Markdown渲染
 ==================='''
                 await bot_interfaces["send_private_message"](ws, user_id, await bot_interfaces["decode_CQ_to_message"](help_message))
                 
@@ -160,6 +177,21 @@ async def execute_function(ws, message):
                     await bot_interfaces["send_private_message"](ws, user_id, await bot_interfaces["decode_CQ_to_message"](image_cq_code))
                 except:
                     await bot_interfaces["send_private_message"](ws, user_id, await bot_interfaces["decode_CQ_to_message"]("抱歉，目前无法为您提供Typst渲染服务，请尝试使用其他指令。"))
+            elif message_content.startswith(".md") or message_content.startswith('.markdown'):
+                md_data = message_content[4:].strip() if message_content.startswith(".md ") else message_content[10:].strip()
+                detected_encoding = chardet.detect(md_data.encode())['encoding']
+                if detected_encoding != 'utf-8':
+                    md_data = md_data.encode(detected_encoding).decode('utf-8')
+
+                image_data = await markdown.markdown_to_image(md_data)
+                image_base64 = base64.b64encode(image_data).decode('utf-8')
+                image_cq_code = f"[CQ:image,file=base64://{image_base64},type=show,id=40000]"
+
+                try: 
+                    await bot_interfaces["send_private_message"](ws, user_id, await bot_interfaces["decode_CQ_to_message"](image_cq_code))
+                except:
+                    await bot_interfaces["send_private_message"](ws, user_id, await bot_interfaces["decode_CQ_to_message"]("抱歉，目前无法为您提供Markdown渲染服务，请尝试使用其他指令。"))  
+
             else:
                 user = User(user_id, user_id in bot.super_users, bot_interfaces["bot_qq"])
                 gpt_response = await user.handle_message(message_content)

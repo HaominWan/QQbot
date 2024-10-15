@@ -6,3 +6,5 @@ aiohttp
 requests
 chardet
 typst
+markdown
+imgkit
