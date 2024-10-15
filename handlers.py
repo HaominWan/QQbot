@@ -65,6 +65,8 @@ async def execute_function(ws, message):
 
             elif message_content.startswith(".draw"):
                 image_cq_code = await drawing.handle_drawing_message(message_content)
+                if image_cq_code == None:
+                    image_cq_code = "抱歉，目前无法为您提供绘图服务，请尝试使用其他指令。"
                 try:
                     await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"](image_cq_code))
                 except:

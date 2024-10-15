@@ -18,27 +18,36 @@ async def save_image_and_convert_to_base64(raw_message):
         if not image_url:
             # 下载图片并转换为 base64 编码
             async with aiohttp.ClientSession() as session:
+                try:
+                    async with session.get(image_url) as response:
+                        image_data = await response.read()
+                        
+                        if not image_data:
+                            raise Exception("Failed to download image data")
+                        
+                        # 验证图像数据是否有效
+                        try:
+                            Image.open(BytesIO(image_data))
+                        except Exception:
+                            raise Exception("Invalid image data")
+                        
+                        base64_encoded_image = base64.b64encode(image_data).decode('utf-8')
+                except aiohttp.ClientPayloadError as e:
+                    print(f"[ClientPayError]: {e}")
+                    return None
+        
+        try:
+        # 下载图片并转换为 base64 编码
+            async with aiohttp.ClientSession() as session:
                 async with session.get(image_url) as response:
                     image_data = await response.read()
-                    
-                    if not image_data:
-                        raise Exception("Failed to download image data")
-                    
-                    # 验证图像数据是否有效
-                    try:
-                        Image.open(BytesIO(image_data))
-                    except Exception:
-                        raise Exception("Invalid image data")
-                    
                     base64_encoded_image = base64.b64encode(image_data).decode('utf-8')
-        
-        # 下载图片并转换为 base64 编码
-        async with aiohttp.ClientSession() as session:
-            async with session.get(image_url) as response:
-                image_data = await response.read()
-                base64_encoded_image = base64.b64encode(image_data).decode('utf-8')
-        
-        return base64_encoded_image
+            
+            return base64_encoded_image
+        except Exception as e:
+            print(f"[ClientPayLoadError]: {e}")
+            return None
+            
     except Exception as e:
         traceback.print_exc()
         return None
@@ -133,7 +142,8 @@ async def generate(raw_message, auth:str = PRODIA_API_KEY, url_=False, XL = Fals
     if("height" not in data):
         data["height"]=748 if XL else 640
     if("model" not in data):
-        data["model"]="anythingV5_PrtRE.safetensors [893e49b9]" if not XL else "cuteyukimixAdorable_midchapter3.safetensors [04bdffe6]" #cuteyukimixAdorable_midchapter3.safetensors [04bdffe6] pastelMixStylizedAnime_pruned_fp16.safetensors [793a26e8] anythingV5_PrtRE.safetensors [893e49b9]
+        data["model"]="anythingV5_PrtRE.safetensors [893e49b9]" if not XL else "cuteyukimixAdorable_midchapter3.safetensors [04bdffe6]" 
+        #cuteyukimixAdorable_midchapter3.safetensors [04bdffe6] pastelMixStylizedAnime_pruned_fp16.safetensors [793a26e8] anythingV5_PrtRE.safetensors [893e49b9] pastelMixStylizedAnime_pruned_fp16.safetensors [793a26e8]
     if("steps" not in data):
         data["steps"]=30
     if("style_preset" not in data):
