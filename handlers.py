@@ -40,13 +40,13 @@ async def execute_function(ws, message):
             print(message["message"][0]["type"] == 'at')
             
             if message_content.startswith(".help"):
-                help_message = '''===================
+                help_message = '''========================
 .help           插件信息
 .reset          重置对话
 .draw           AI绘图
 .typ/.typst     Typst渲染
 .md/.markdown   Markdown渲染
-==================='''
+========================'''
                 await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"](help_message))
 
             elif message_content.startswith(".reset"):
@@ -115,13 +115,13 @@ async def execute_function(ws, message):
             print(message_content)
 
             if message_content.startswith(".help"):
-                help_message = '''===================
+                help_message = '''========================
 .help           插件信息
 .reset          重置对话
 .draw           AI绘图
 .typ/.typst     Typst渲染
 .md/.markdown   Markdown渲染
-==================='''
+========================'''
                 await bot_interfaces["send_private_message"](ws, user_id, await bot_interfaces["decode_CQ_to_message"](help_message))
                 
             elif message_content.startswith(".reset"):
