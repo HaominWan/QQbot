@@ -117,7 +117,7 @@ async def generate(raw_message, auth:str = PRODIA_API_KEY, url_=False, XL = Fals
     if("height" not in data):
         data["height"]=748 if XL else 640
     if("model" not in data):
-        data["model"]="cuteyukimixAdorable_midchapter3.safetensors [04bdffe6]" if not XL else "anythingV5_PrtRE.safetensors [893e49b9]" #cuteyukimixAdorable_midchapter3.safetensors [04bdffe6] pastelMixStylizedAnime_pruned_fp16.safetensors [793a26e8] anythingV5_PrtRE.safetensors [893e49b9]
+        data["model"]="anythingV5_PrtRE.safetensors [893e49b9]" if not XL else "cuteyukimixAdorable_midchapter3.safetensors [04bdffe6]" #cuteyukimixAdorable_midchapter3.safetensors [04bdffe6] pastelMixStylizedAnime_pruned_fp16.safetensors [793a26e8] anythingV5_PrtRE.safetensors [893e49b9]
     if("steps" not in data):
         data["steps"]=30
     if("style_preset" not in data):
@@ -180,6 +180,13 @@ async def generate(raw_message, auth:str = PRODIA_API_KEY, url_=False, XL = Fals
     except Exception as e:
         traceback.print_exc()
         return None
+    
+async def handle_drawing_message(message_content):
+    draw_data = message_content[6:].strip()
+    image_base64 = await save_image_and_convert_to_base64(draw_data)
+    image_cq_code = f"[CQ:image,file=base64://{image_base64},type=show,id=40000]"
+    
+    return image_cq_code
 
 # [
 #   "3Guofeng3_v34.safetensors [50f420de]",                     R

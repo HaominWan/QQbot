@@ -2,6 +2,8 @@ import markdown
 import imgkit
 import os
 import time
+import chardet
+import base64
 
 async def markdown_to_image(md_text: str) -> bytes:
     try:
@@ -30,3 +32,15 @@ async def markdown_to_image(md_text: str) -> bytes:
         os.remove(temp_file)
         print("[Markdown Renderer] Error:", e)
         raise e
+    
+async def handle_markdown_message(message_content):
+    md_data = message_content[4:].strip() if message_content.startswith(".md ") else message_content[10:].strip()
+    detected_encoding = chardet.detect(md_data.encode())['encoding']
+    if detected_encoding != 'utf-8':
+        md_data = md_data.encode(detected_encoding).decode('utf-8')
+
+    image_data = await markdown_to_image(md_data)
+    image_base64 = base64.b64encode(image_data).decode('utf-8')
+    image_cq_code = f"[CQ:image,file=base64://{image_base64},type=show,id=40000]"
+
+    return image_cq_code

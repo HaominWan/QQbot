@@ -21,8 +21,6 @@ class Group:
             system_role = roles.get_Murasame_goshujin_role(user_id, self.bot_qq)
         else:
             system_role = roles.get_Murasame_customs_role(user_id, self.bot_qq)
-            
-        #self.add_message("system", system_role)
 
         self.add_message("user", message_content, user_id)
 

@@ -64,41 +64,21 @@ async def execute_function(ws, message):
                     await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"](reset_message))
 
             elif message_content.startswith(".draw"):
-                draw_data = message_content[6:].strip()
-                image_base64 = await drawing.save_image_and_convert_to_base64(draw_data)
-                
-                image_cq_code = f"[CQ:image,file=base64://{image_base64},type=show,id=40000]"
+                image_cq_code = await drawing.handle_drawing_message(message_content)
                 try:
                     await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"](image_cq_code))
                 except:
                     await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"]("抱歉，目前无法为您提供绘图服务，请尝试使用其他指令。"))
                     
             elif message_content.startswith(".typ") or message_content.startswith(".typst"):
-                typst_data = message_content[5:].strip() if message_content.startswith(".typ ") else message_content[7:].strip()
-                # 检查并转换 typst_data 为 UTF-8 编码
-                detected_encoding = chardet.detect(typst_data.encode())['encoding']
-                if detected_encoding != 'utf-8':
-                    typst_data = typst_data.encode(detected_encoding).decode('utf-8')
-                
-                image_data = await typst.render_async(typst_data)
-                image_base64 = base64.b64encode(image_data).decode('utf-8')
-                image_cq_code = f"[CQ:image,file=base64://{image_base64},type=show,id=40000]"
-                
+                image_cq_code = await typst.handle_typst_message(message_content)
                 try:
                     await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"](image_cq_code))
                 except:
                     await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"]("抱歉，目前无法为您提供Typst渲染服务，请尝试使用其他指令。"))
 
             elif message_content.startswith(".md") or message_content.startswith('.markdown'):
-                md_data = message_content[4:].strip() if message_content.startswith(".md ") else message_content[10:].strip()
-                detected_encoding = chardet.detect(md_data.encode())['encoding']
-                if detected_encoding != 'utf-8':
-                    md_data = md_data.encode(detected_encoding).decode('utf-8')
-
-                image_data = await markdown_to_image(md_data)
-                image_base64 = base64.b64encode(image_data).decode('utf-8')
-                image_cq_code = f"[CQ:image,file=base64://{image_base64},type=show,id=40000]"
-
+                image_cq_code = await handle_markdown_message(message_content)
                 try: 
                     await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"](image_cq_code))
                 except:
@@ -155,38 +135,20 @@ async def execute_function(ws, message):
                     await bot_interfaces["send_private_message"](ws, user_id, await bot_interfaces["decode_CQ_to_message"](reset_message))
                 pass
             elif message_content.startswith(".draw"):
-                draw_data = message_content[6:].strip()
-                draw_data = message_content[6:].strip()
-                image_base64 = await drawing.save_image_and_convert_to_base64(draw_data)
+                image_cq_code = await drawing.handle_drawing_message(message_content)
                 try:
-                    await bot_interfaces["send_private_message"](ws, user_id, await bot_interfaces["decode_CQ_to_message"](image_data))
+                    await bot_interfaces["send_private_message"](ws, user_id, await bot_interfaces["decode_CQ_to_message"](image_cq_code))
                 except:
                     await bot_interfaces["send_private_message"](ws, user_id, await bot_interfaces["decode_CQ_to_message"]("抱歉，目前无法为您提供绘图服务，请尝试使用其他指令。"))
                     
             elif message_content.startswith(".typ") or message_content.startswith(".typst"):
-                typst_data = message_content[5:].strip() if message_content.startswith(".typ ") else message_content[7:].strip()
-                # 检查并转换 typst_data 为 UTF-8 编码
-                detected_encoding = chardet.detect(typst_data.encode())['encoding']
-                if detected_encoding != 'utf-8':
-                    typst_data = typst_data.encode(detected_encoding).decode('utf-8')
-                image_data = await typst.render_async(typst_data)
-                image_base64 = base64.b64encode(image_data).decode('utf-8')
-                image_cq_code = f"[CQ:image,file=base64://{image_base64},type=show,id=40000]"
-                
+                image_cq_code = await typst.handle_typst_message(message_content)               
                 try:
                     await bot_interfaces["send_private_message"](ws, user_id, await bot_interfaces["decode_CQ_to_message"](image_cq_code))
                 except:
                     await bot_interfaces["send_private_message"](ws, user_id, await bot_interfaces["decode_CQ_to_message"]("抱歉，目前无法为您提供Typst渲染服务，请尝试使用其他指令。"))
             elif message_content.startswith(".md") or message_content.startswith('.markdown'):
-                md_data = message_content[4:].strip() if message_content.startswith(".md ") else message_content[10:].strip()
-                detected_encoding = chardet.detect(md_data.encode())['encoding']
-                if detected_encoding != 'utf-8':
-                    md_data = md_data.encode(detected_encoding).decode('utf-8')
-
-                image_data = await markdown_to_image(md_data)
-                image_base64 = base64.b64encode(image_data).decode('utf-8')
-                image_cq_code = f"[CQ:image,file=base64://{image_base64},type=show,id=40000]"
-
+                image_cq_code = await markdown_to_image(message_content)
                 try: 
                     await bot_interfaces["send_private_message"](ws, user_id, await bot_interfaces["decode_CQ_to_message"](image_cq_code))
                 except:
