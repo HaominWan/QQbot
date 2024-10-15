@@ -95,7 +95,7 @@ async def execute_function(ws, message):
                 if detected_encoding != 'utf-8':
                     md_data = md_data.encode(detected_encoding).decode('utf-8')
 
-                image_data = await markdown.markdown_to_image(md_data)
+                image_data = await markdown_to_image(md_data)
                 image_base64 = base64.b64encode(image_data).decode('utf-8')
                 image_cq_code = f"[CQ:image,file=base64://{image_base64},type=show,id=40000]"
 
@@ -183,7 +183,7 @@ async def execute_function(ws, message):
                 if detected_encoding != 'utf-8':
                     md_data = md_data.encode(detected_encoding).decode('utf-8')
 
-                image_data = await markdown.markdown_to_image(md_data)
+                image_data = await markdown_to_image(md_data)
                 image_base64 = base64.b64encode(image_data).decode('utf-8')
                 image_cq_code = f"[CQ:image,file=base64://{image_base64},type=show,id=40000]"
 
