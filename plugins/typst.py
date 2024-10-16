@@ -5,8 +5,10 @@ import time
 import typst
 import chardet
 import base64
+import emoji
 
 def render(typst_text:str)->str:
+    typst_text = emoji.emojize(typst_text, use_aliases = True)
     typst_text = "#set page(width: auto, height: auto, margin: (x: 10pt, y: 10pt))\n" + f"#par[{typst_text}]\n"
     if sys.platform == "win32" or sys.platform == "win64":
         temp_file = 'D:/QQbot/Bot/tmp/' + str(time.time()) + '.typ'

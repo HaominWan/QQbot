@@ -10,3 +10,4 @@ markdown
 imgkit
 pymdown-extensions
 google-generativeai
+emoji
