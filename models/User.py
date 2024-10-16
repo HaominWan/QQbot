@@ -28,6 +28,7 @@ class User:
         return self.chat_history
     
     async def handle_message(self, message_content):
+        
         self.add_message("user", message_content)
         gpt_response = await call_groq_api(self.chat_history)
         self.add_message("assistant", gpt_response)

@@ -5,10 +5,10 @@ import PIL.Image as pi
 import io
 import textwrap
 
-import config
+from config import *
 
 
-gai.configure(api_key=config.GEMINI_API_KEY)
+gai.configure(api_key=GEMINI_API_KEY)
 
 def to_markdown(text):
   text = text.replace('•', '  *')

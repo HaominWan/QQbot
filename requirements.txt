@@ -9,3 +9,4 @@ typst
 markdown
 imgkit
 pymdown-extensions
+google-generativeai

@@ -3,7 +3,6 @@ import json
 import websockets 
 import base64
 import aiohttp
-import gemini
 import time
 import traceback
 import os
