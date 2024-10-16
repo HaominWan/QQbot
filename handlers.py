@@ -13,6 +13,13 @@ from api import *
 from config import *
 from plugins import *
  
+async def handle_image_message(message_url, message_content):
+    message_content += ' </image>prompt: '
+    for part in message_url:
+        image_prompt = await gemini.image_to_text(await gemini.url_to_image(part))
+        message_content += image_prompt
+        message_content += " | "
+
 async def handler_init(interfaces):
     global bot_interfaces
     bot_interfaces = interfaces
@@ -34,6 +41,11 @@ async def execute_function(ws, message):
                 return
             user_id = message['user_id']
             message_id = message['message_id']
+            message_image_url = []
+            for part in message['message']:
+                if part['type'] == 'image':
+                    message_image_url.append(part['data']['file'])
+
             message_content = await bot_interfaces["encode_message_to_CQ"](message['message'])
             print(message_content)
             print(message["message"][0]["type"] == 'at')
@@ -95,6 +107,8 @@ async def execute_function(ws, message):
 
                     message_content = reply_message_content + message_content
 
+                    if len(message_image_url) != 0:
+                        await handle_image_message(message_image_url, message_content)
                     group = Group(group_id, bot_interfaces["bot_qq"])
                     gpt_response = await group.handle_message(user_id, message_content)
                     return await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"](gpt_response))
@@ -104,6 +118,8 @@ async def execute_function(ws, message):
                 if str(bot_interfaces["bot_qq"]) == message["message"][0]["data"]["qq"]:
                     print("enter ai mode")
 
+                    if len(message_image_url) != 0:
+                        await handle_image_message(message_image_url, message_content)
                     group = Group(group_id, bot_interfaces["bot_qq"])
                     gpt_response = await group.handle_message(user_id, message_content)
                     return await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"](gpt_response))
@@ -112,6 +128,10 @@ async def execute_function(ws, message):
         if message["message_type"] == "private":
             user_id = message['user_id']
             message_id = message['message_id']
+            message_image_url = []
+            for part in message['message']:
+                if part['type'] == 'image':
+                    message_image_url.append(part['data']['file'])
             message_content = await bot_interfaces["encode_message_to_CQ"](message['message'])
             print(message_content)
 
@@ -156,6 +176,8 @@ async def execute_function(ws, message):
                     await bot_interfaces["send_private_message"](ws, user_id, await bot_interfaces["decode_CQ_to_message"]("抱歉，目前无法为您提供Markdown渲染服务，请尝试使用其他指令。"))  
 
             else:
+                if len(message_image_url) != 0:
+                    await handle_image_message(message_image_url, message_content)
                 user = User(user_id, user_id in bot.super_users, bot_interfaces["bot_qq"])
                 gpt_response = await user.handle_message(message_content)
                 return await bot_interfaces["send_private_message"](ws, user_id, await bot_interfaces["decode_CQ_to_message"](gpt_response))
