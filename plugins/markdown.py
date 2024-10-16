@@ -38,8 +38,11 @@ async def markdown_to_image(md_text: str) -> str:
 async def handle_markdown_message(message_content):
     md_data = message_content[4:].strip() if message_content.startswith(".md ") else message_content[10:].strip()
     detected_encoding = chardet.detect(md_data.encode())['encoding']
+    if detected_encoding is None:
+        detected_encoding = 'utf-8'
+        
     if detected_encoding != 'utf-8':
-        md_data = md_data.encode(detected_encoding).decode('utf-8')
+        typst_data = typst_data.encode(detected_encoding).decode('utf-8')
 
     image_base64 = await markdown_to_image(md_data)
     image_cq_code = f"[CQ:image,file=base64://{image_base64},type=show,id=40000]"

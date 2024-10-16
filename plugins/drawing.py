@@ -5,6 +5,9 @@ import asyncio
 import base64
 from PIL import Image
 from io import BytesIO
+import aiofiles
+import time
+import os
 
 from config import *
 from api import *
@@ -14,39 +17,53 @@ async def save_image_and_convert_to_base64(raw_message):
     try:
         # 调用 generate 方法并设置 url_ = True
         image_url = await generate(raw_message, url_=True)
+        local_directory = 'D:/QQbot/Bot/tmp/'
         
         if not image_url:
             # 下载图片并转换为 base64 编码
             async with aiohttp.ClientSession() as session:
                 try:
                     async with session.get(image_url) as response:
-                        image_data = await response.read()
+
+                        if response.status == 200:
+                            file_name = os.path.join(local_directory, f"drawing{time.time}.png")
+                            f = await aiofiles.open(file_name, mode='wb')
+                            await f.write(await response.read())
+                            await f.close()
+                        else:
+                            raise Exception(f"Failed to download image, status code: {response.status}")
                         
-                        if not image_data:
-                            raise Exception("Failed to download image data")
+                        async with aiofiles .open(f"drawing{time.time}.png", mode='rb') as f:
+                            image_data = await f.read()
+                            base64_encoded_image = base64.b64encode(image_data).decode('utf-8')
+                        os.remove(file_name)
+                        return base64_encoded_image
                         
-                        # 验证图像数据是否有效
-                        try:
-                            Image.open(BytesIO(image_data))
-                        except Exception:
-                            raise Exception("Invalid image data")
-                        
-                        base64_encoded_image = base64.b64encode(image_data).decode('utf-8')
                 except aiohttp.ClientPayloadError as e:
                     print(f"[ClientPayError]: {e}")
                     return None
         
-        try:
         # 下载图片并转换为 base64 编码
-            async with aiohttp.ClientSession() as session:
-                async with session.get(image_url) as response:
-                    image_data = await response.read()
-                    base64_encoded_image = base64.b64encode(image_data).decode('utf-8')
-            
-            return base64_encoded_image
-        except Exception as e:
-            print(f"[ClientPayLoadError]: {e}")
-            return None
+        async with aiohttp.ClientSession() as session:
+                try:
+                    async with session.get(image_url) as response:
+                        if response.status != 200:
+                            # image_data = await response.read()
+                            # base64_encoded_image = base64.b64encode(image_data).decode('utf-8')
+                            file_name = os.path.join(local_directory, f"drawing{time.time}.png")
+                            f = await aiofiles.open(file_name, mode='wb')
+                            await f.write(await response.read())
+                            await f.close()
+                        else:
+                            raise Exception(f"Failed to download image, status code: {response.status}")
+                        async with aiofiles .open(f"drawing{time.time}.png", mode='rb') as f:
+                            image_data = await f.read()
+                            base64_encoded_image = base64.b64encode(image_data).decode('utf-8')
+                        os.remove(file_name)
+                        return base64_encoded_image
+                except Exception as e:
+                    print(f"[ClientPayLoadError]: {e}")
+                    return None
             
     except Exception as e:
         traceback.print_exc()
