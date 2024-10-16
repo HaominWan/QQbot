@@ -1,5 +1,4 @@
 import asyncio
-import gemini
 import bot
 import os
 import roles
