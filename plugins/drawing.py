@@ -18,26 +18,35 @@ async def save_image_and_convert_to_base64(raw_message):
         # 调用 generate 方法并设置 url_ = True
         image_url = await generate(raw_message, url_=True)
         local_directory = 'D:/QQbot/Bot/tmp/'
+        proxy_url = "http://127.0.0.1:7890"
         
         if image_url:
             # 下载图片并转换为 base64 编码
-            async with aiohttp.ClientSession() as session:
+            timeout = aiohttp.ClientTimeout(total=30)
+            async with aiohttp.ClientSession(timeout=timeout) as session:
                 try:
-                    async with session.get(image_url) as response:
-                        if response.status == 200:
-                            file_name = os.path.join(local_directory, f"drawing{int(time.time())}.png")
-                            async with aiofiles.open(file_name, mode='wb') as f:
-                                await f.write(await response.read())
-                            
-                            async with aiofiles.open(file_name, mode='rb') as f:
-                                image_data = await f.read()
-                                base64_encoded_image = base64.b64encode(image_data).decode('utf-8')
-                            os.remove(file_name)
-                            return base64_encoded_image
-                        else:
-                            raise Exception(f"Failed to download image, status code: {response.status}")
+                    async with session.get(image_url, proxy = proxy_url) as response:
+                        # 检查响应状态
+                        response.raise_for_status()
+                        
+                        file_name = os.path.join(local_directory, f"drawing{int(time.time())}.png")
+                        async with aiofiles.open(file_name, mode='wb') as f:
+                            await f.write(await response.read())
+                        
+                        async with aiofiles.open(file_name, mode='rb') as f:
+                            image_data = await f.read()
+                            base64_encoded_image = base64.b64encode(image_data).decode('utf-8')
+                        
+                        os.remove(file_name)
+                        return base64_encoded_image
                 except aiohttp.ClientPayloadError as e:
                     print(f"[ClientPayloadError]: {e}")
+                    return None
+                except aiohttp.HttpProcessingError as e:
+                    print(f"[HttpProcessingError]: {e}")
+                    return None
+                except Exception as e:
+                    print(f"[Unexpected Error]: {e}")
                     return None
         else:
             print("No image URL returned.")
@@ -203,10 +212,10 @@ async def generate(raw_message, auth:str = PRODIA_API_KEY, url_=False, XL = Fals
     
 async def handle_drawing_message(message_content):
     draw_data = message_content[6:].strip()
-    # image_base64 = await save_image_and_convert_to_base64(draw_data)
-    # image_cq_code = f"[CQ:image,file=base64://{image_base64},type=show,id=40000]"
-    image_url = await generate(message_content, url_=True)
-    image_cq_code = f"[CQ:image,file={image_url},type=show,id=40000]"
+    image_base64 = await save_image_and_convert_to_base64(draw_data)
+    image_cq_code = f"[CQ:image,file=base64://{image_base64},type=show,id=40000]"
+    # image_url = await generate(message_content, url_=True)
+    # image_cq_code = f"[CQ:image,file={image_url},type=show,id=40000]"
     
     return image_cq_code
 
