@@ -4,6 +4,7 @@ import os
 import time
 import chardet
 import base64
+import emoji
 
 async def markdown_to_image(md_text: str) -> str:
     try:
@@ -19,10 +20,11 @@ async def markdown_to_image(md_text: str) -> str:
         raise e
 
     try:
-        md_html = markdown.markdown(md_text, extensions=['extra', 'sane_lists', 'toc', 'tables', 'nl2br', 'attr_list', 'def_list', 'fenced_code', 'footnotes', 'meta', 'smarty', 'wikilinks', 'admonition', 'codehilite', 'legacy_attrs', 'legacy_em', 'md_in_html', 'pymdownx.arithmatex', 'pymdownx.betterem', 'pymdownx.caret', 'pymdownx.critic', 'pymdownx.details', 'pymdownx.inlinehilite', 'pymdownx.keys', 'pymdownx.magiclink', 'pymdownx.mark', 'pymdownx.smartsymbols', 'pymdownx.snippets', 'pymdownx.superfences', 'pymdownx.tasklist', 'pymdownx.tilde'])
+        md_html = markdown.markdown(md_text, extensions=['extra', 'sane_lists', 'toc', 'tables', 'nl2br', 'attr_list', 'def_list', 'fenced_code', 'footnotes', 'meta', 'smarty', 'wikilinks', 'admonition', 'codehilite', 'legacy_attrs', 'legacy_em', 'md_in_html', 'pymdownx.arithmatex', 'pymdownx.betterem', 'pymdownx.caret', 'pymdownx.critic', 'pymdownx.details', 'pymdownx.inlinehilite', 'pymdownx.keys', 'pymdownx.magiclink', 'pymdownx.mark', 'pymdownx.smartsymbols', 'pymdownx.snippets', 'pymdownx.superfences', 'pymdownx.tasklist', 'pymdownx.tilde','extra', 'sane_lists', 'smarty', 'toc', 'tables', 'fenced_code', 'codehilite', 'nl2br', 'admonition', 'attr_list', 'def_list', 'footnotes', 'meta', 'abbr', 'md_in_html', 'strike'])
+        md_html = emoji.emojize(md_html, use_aliases=True)
         config = imgkit.config(wkhtmltoimage='C:/Program Files/wkhtmltopdf/bin/wkhtmltoimage.exe')
-        imgkit.from_string(md_html, temp_file.replace('.md', '.jpg'), config = config)
-        with open(temp_file.replace('.md', '.jpg'), 'rb') as img_file:
+        imgkit.from_string(md_html, temp_file.replace('.md', '.png'), config = config)
+        with open(temp_file.replace('.md', '.png'), 'rb') as img_file:
             img_data = img_file.read()
         img_base64 = base64.b64encode(img_data).decode('utf-8')
         return img_base64
@@ -32,8 +34,8 @@ async def markdown_to_image(md_text: str) -> str:
     finally:
         if os.path.exists(temp_file):
             os.remove(temp_file)
-        if os.path.exists(temp_file.replace('.md', '.jpg')):
-            os.remove(temp_file.replace('.md', '.jpg'))
+        if os.path.exists(temp_file.replace('.md', '.png')):
+            os.remove(temp_file.replace('.md', '.png'))
 
 async def handle_markdown_message(message_content):
     md_data = message_content[4:].strip() if message_content.startswith(".md ") else message_content[10:].strip()
@@ -42,7 +44,7 @@ async def handle_markdown_message(message_content):
         detected_encoding = 'utf-8'
         
     if detected_encoding != 'utf-8':
-        typst_data = typst_data.encode(detected_encoding).decode('utf-8')
+        md_data = md_data.encode(detected_encoding).decode('utf-8')
 
     image_base64 = await markdown_to_image(md_data)
     image_cq_code = f"[CQ:image,file=base64://{image_base64},type=show,id=40000]"

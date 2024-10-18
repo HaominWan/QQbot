@@ -9,7 +9,11 @@ import emoji
 
 def render(typst_text:str)->str:
     typst_text = emoji.emojize(typst_text)
-    typst_text = "#set text(font:(\"Noto Color Emoji\", \"Times New Roman\", \"Microsoft Yahei\"))\n" + "#set page(width: auto, height: auto, margin: (x: 10pt, y: 10pt))\n" + f"#par[{typst_text}]\n"
+    typst_text = (
+        "#set text(font:(\"Noto Color Emoji\", \"Times New Roman\", \"Microsoft Yahei\"))\n" 
+        + "#set page(width: auto, height: auto, margin: (x: 10pt, y: 10pt))\n" 
+        + f"#par[{typst_text}]\n"
+    )
     if sys.platform == "win32" or sys.platform == "win64":
         temp_file = 'D:/QQbot/Bot/tmp/' + str(time.time()) + '.typ'
         try:
@@ -23,6 +27,7 @@ def render(typst_text:str)->str:
             raise e
         
         try:
+            #疑似该地无法解析额彩色emoji
             img = typst.compile(temp_file, format='png')
             os.remove(temp_file)
         except Exception as e:

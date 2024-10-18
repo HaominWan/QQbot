@@ -11,3 +11,4 @@ imgkit
 pymdown-extensions
 google-generativeai
 emoji
+aiofiles
