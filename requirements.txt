@@ -12,3 +12,9 @@ pymdown-extensions
 google-generativeai
 emoji
 aiofiles
+lxml
+pyppeteer
+wikipedia
+tiktoken
+latex
+TUI

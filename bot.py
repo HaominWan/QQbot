@@ -22,7 +22,7 @@ echo_counter = 0
 echo_dict = {}
 running_tasks = []
 
-proxy = "http://127.0.0.1:7890"
+proxy_url = "http://127.0.0.1:7890"
 
 crash_signal = False
 
@@ -147,25 +147,45 @@ async def send_private_message(ws:websockets.WebSocketClientProtocol, user_id, m
         },
         "echo": self_echo
     }
-    await ws.send(json.dumps(json_data))
-    while self_echo not in echo_dict and not crash_signal:
-        await asyncio.sleep(0.1)
-    response = echo_dict.get(self_echo)
-    if response:
-        del echo_dict[self_echo]
-        print ("[Lagrange Core]Response:",response)
-        if "status" in response:
-            if response["status"] == "ok":
-                print("[Lagrange Core]Message sent successfully")
-            else:
-                print("[Lagrange Core]Failed to send message")
-        if response == None:
-            return None
-        if "data" in response and response["data"] != None and "message_id" in response["data"]:
-            return response["data"]["message_id"]
-    else:
-        print("[Lagrange Core]No response received or crash signal triggered")
-    return None
+    # await ws.send(json.dumps(json_data))
+    # while self_echo not in echo_dict and not crash_signal:
+    #     await asyncio.sleep(0.1)
+    # response = echo_dict.get(self_echo)
+    # if response:
+    #     del echo_dict[self_echo]
+    #     print ("[Lagrange Core]Response:",response)
+    #     if "status" in response:
+    #         if response["status"] == "ok":
+    #             print("[Lagrange Core]Message sent successfully")
+    #         else:
+    #             print("[Lagrange Core]Failed to send message")
+    #     if response == None:
+    #         return None
+    #     if "data" in response and response["data"] != None and "message_id" in response["data"]:
+    #         return response["data"]["message_id"]
+    # else:
+    #     print("[Lagrange Core]No response received or crash signal triggered")
+    # return None
+    async with aiohttp.ClientSession() as session:
+        await ws.send(json.dumps(json_data))
+        while self_echo not in echo_dict and not crash_signal:
+            await asyncio.sleep(0.1)
+        response = echo_dict.get(self_echo)
+        if response:
+            del echo_dict[self_echo]
+            print("[Lagrange Core]Response:", response)
+            if "status" in response:
+                if response["status"] == "ok":
+                    print("[Lagrange Core]Message sent successfully")
+                else:
+                    print("[Lagrange Core]Failed to send message")
+            if response is None:
+                return None
+            if "data" in response and response["data"] is not None and "message_id" in response["data"]:
+                return response["data"]["message_id"]
+        else:
+            print("[Lagrange Core]No response received or crash signal triggered")
+        return None
 
 async def withdraw_group_message(ws:websockets.WebSocketClientProtocol, message_id):
     if message_id == None:
@@ -288,6 +308,7 @@ def set_interfaces():
         "decode_CQ_to_message": decode_CQ_to_message,
         "test_if_super_user": test_if_super_user,
         "bot_qq": bot_qq,
+        "proxy_url": proxy_url
         
     }
 

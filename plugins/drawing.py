@@ -12,13 +12,13 @@ import os
 from config import *
 from api import *
 from aiohttp import ClientTimeout
+from bot import proxy_url
 
 async def save_image_and_convert_to_base64(raw_message):
     try:
         # 调用 generate 方法并设置 url_ = True
         image_url = await generate(raw_message, url_=True)
         local_directory = 'D:/QQbot/Bot/tmp/'
-        proxy_url = "http://127.0.0.1:7890"
         
         if image_url:
             # 下载图片并转换为 base64 编码
@@ -42,8 +42,8 @@ async def save_image_and_convert_to_base64(raw_message):
                 except aiohttp.ClientPayloadError as e:
                     print(f"[ClientPayloadError]: {e}")
                     return None
-                except aiohttp.HttpProcessingError as e:
-                    print(f"[HttpProcessingError]: {e}")
+                except aiohttp.ClientResponseError as e:
+                    print(f"[ClientResponseError]: {e}")
                     return None
                 except Exception as e:
                     print(f"[Unexpected Error]: {e}")
