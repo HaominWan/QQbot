@@ -17,4 +17,4 @@ pyppeteer
 wikipedia
 tiktoken
 latex
-TUI
+selenium
