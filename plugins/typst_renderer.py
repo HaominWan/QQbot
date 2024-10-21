@@ -6,6 +6,8 @@ import typst
 import chardet
 import base64
 import emoji
+import aiohttp
+import aiofiles
 
 def render(typst_text:str)->str:
     typst_text = emoji.emojize(typst_text)
