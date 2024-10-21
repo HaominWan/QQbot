@@ -1,11 +1,14 @@
-import markdown
-import imgkit
+# import markdown
+# import imgkit
 import os
 import time
 import chardet
 import base64
-import emoji
+# import emoji
 import subprocess
+import io
+
+from PIL import Image, ImageDraw, ImageFont
 
 # async def markdown_to_image(md_text: str) -> str:
 #     try:
