@@ -24,8 +24,8 @@ async def handle_card_info(card_info):
     return await bot.bot_interfaces["decode_CQ_to_message"](CQ_code)
 
 async def get_card_info(card_name):
-    services = EdgeService(executable_path="")#Edgedriver路径
-    options = webdriver.ChromeOptions()
+    services = EdgeService(executable_path="D:/edgedriver_win64/msedgedriver.exe")#Edgedriver路径
+    options = webdriver.EdgeOptions()
     options.add_argument("--headless")  # 无头模式
     options.add_argument("--disable-gpu")  # 禁用 GPU 加速
     options.add_argument("--no-sandbox")  # 解决 DevToolsActivePort 文件不存在的报错
@@ -60,15 +60,15 @@ async def get_card_info(card_name):
             card_info["image_url"] = image_url
             card_info["card_type"] = card_type
             
-            if card_type[0] is '怪兽':
-                if card_type[2] is '连接':
+            if card_type[0] == '怪兽':
+                if card_type[2] == '连接':
                     meta_info = driver.find_element(By.CLASS_NAME, "meta").text.strip()
                     meta_parts = meta_info.split(" / ")
                     card_info["LINK"] = str(meta_parts[0])
                     card_info["atk"] = str(meta_parts[1])
                     card_info["race"] = str(meta_parts[2])
                     card_info["element"] = str(meta_parts[3])
-                if card_type[2] is 'XYZ':
+                if card_type[2] == 'XYZ':
                     meta_info = driver.find_element(By.CLASS_NAME, "meta").text.strip()
                     meta_parts = meta_info.split(" / ")
                     card_info["CLASS"] = str(meta_parts[0])

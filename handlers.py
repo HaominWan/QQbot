@@ -106,7 +106,7 @@ async def execute_function(ws, message):
                 except:
                     await bot_interfaces["send_group_message"](ws, group_id, "抱歉，未找到相关卡片信息。")
                     
-            elif message_content.startswith(".P5"):
+            elif message_content.startswith(".P5") or message_content.startswith(".p5"):
                 card_image = await P5_card.get_card(message_content[4:])
                 try:
                     await bot_interfaces["send_group_message"](ws, group_id, card_image)
