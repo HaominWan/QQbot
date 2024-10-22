@@ -24,7 +24,7 @@ async def handle_card_info(card_info):
     return await bot.bot_interfaces["decode_CQ_to_message"](CQ_code)
 
 async def get_card_info(card_name):
-    services = ChromeService(executable_path="")
+    services = ChromeService(executable_path="C:/Program Files/Google/Chrome/Application/chrome.exe")
     options = webdriver.ChromeOptions()
     driver = webdriver.Chrome(service=services, options=options)
     message_box = []
@@ -52,6 +52,7 @@ async def get_card_info(card_name):
 
             card_info["name"] = name
             card_info["effect"] = effect
+            card_info["image_url"] = image_url
             card_info["card_type"] = card_type
             
             if card_type[0] is '怪兽':
@@ -82,6 +83,3 @@ async def get_card_info(card_name):
         return message_box
     finally:
         driver.quit()
-
-
-#方案二：

@@ -58,6 +58,7 @@ async def execute_function(ws, message):
 .typ/.typst     Typst渲染
 .md/.markdown   Markdown渲染
 .YGO            查询卡片信息
+.P5             预告信
 ========================'''
                 await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"](help_message))
 
@@ -104,6 +105,13 @@ async def execute_function(ws, message):
                     await bot_interfaces["send_group_message"](ws, group_id, card_info)
                 except:
                     await bot_interfaces["send_group_message"](ws, group_id, "抱歉，未找到相关卡片信息。")
+                    
+            elif message_content.startswith(".P5"):
+                card_image = await P5_card.get_card(message_content[4:])
+                try:
+                    await bot_interfaces["send_group_message"](ws, group_id, card_image)
+                except:
+                    await bot_interfaces["send_group_message"](ws, group_id, "怪盗团有点繁忙")
 
             elif message["message"][0]["type"] == "reply" and message["message"][2]["type"] == "at":
                 if str(bot_interfaces["bot_qq"]) == message["message"][2]["data"]["qq"]:
@@ -120,7 +128,6 @@ async def execute_function(ws, message):
                     group = Group(group_id, bot_interfaces["bot_qq"])
                     gpt_response = await group.handle_message(user_id, message_content)
                     return await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"](gpt_response))
-
             elif message["message"][0]["type"] == "at":
                 print(str(message['self_id']) == message["message"][0]["data"]["qq"])
                 if str(bot_interfaces["bot_qq"]) == message["message"][0]["data"]["qq"]:
@@ -151,6 +158,7 @@ async def execute_function(ws, message):
 .typ/.typst     Typst渲染
 .md/.markdown   Markdown渲染
 .YGO            查询卡片信息
+.P5             预告信
 ========================'''
                 await bot_interfaces["send_private_message"](ws, user_id, await bot_interfaces["decode_CQ_to_message"](help_message))
                 
@@ -189,6 +197,12 @@ async def execute_function(ws, message):
                     await bot_interfaces["send_private_message"](ws, user_id, card_info)
                 except:
                     await bot_interfaces["send_private_message"](ws, user_id, "抱歉，未找到相关卡片信息。")  
+            elif message_content.startswith(".P5"):
+                card_image = await P5_card.get_card(message_content[4:])
+                try:
+                    await bot_interfaces["send_private_message"](ws, user_id, card_image)
+                except:
+                    await bot_interfaces["send_private_message"](ws, user_id, "怪盗团有点繁忙")
 
             else:
                 if len(message_image_url) != 0:
