@@ -1,6 +1,6 @@
 import bot
 from selenium import webdriver
-from selenium.webdriver.chrome.service import Service as ChromeService
+from selenium.webdriver.edge.service import Service as EdgeService
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -24,9 +24,14 @@ async def handle_card_info(card_info):
     return await bot.bot_interfaces["decode_CQ_to_message"](CQ_code)
 
 async def get_card_info(card_name):
-    services = ChromeService(executable_path="C:/Program Files/Google/Chrome/Application/chrome.exe")
+    services = EdgeService(executable_path="")#Edgedriver路径
     options = webdriver.ChromeOptions()
-    driver = webdriver.Chrome(service=services, options=options)
+    options.add_argument("--headless")  # 无头模式
+    options.add_argument("--disable-gpu")  # 禁用 GPU 加速
+    options.add_argument("--no-sandbox")  # 解决 DevToolsActivePort 文件不存在的报错
+    options.add_argument("--disable-dev-shm-usage")  # 解决资源限制问题
+
+    driver = webdriver.Edge(service=services, options=options)
     message_box = []
     try:
         driver.get("https://db.yugioh-card-cn.com/card_search.action.html")

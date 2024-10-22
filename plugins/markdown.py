@@ -6,7 +6,6 @@ import chardet
 import base64
 # import emoji
 import subprocess
-import io
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -50,6 +49,22 @@ async def markdown_to_image(md_text: str) -> str:
 
         subprocess.run(['node', 'Bot/plugins/renderMarkdown.js', md_text, output_image], check=True)
         
+        #计算文本尺寸
+        font = ImageFont.load_default()
+        lines = md_text.split('\n')
+        max_width = max([font.getsize(line)[0] for line in lines])
+        total_height = sum([font.getsize(line)[1] for line in lines])
+
+        #图片生成
+        image = Image.new('RGB', (max_width, total_height), (255, 255, 255))
+        draw = ImageDraw.Draw(image)
+        y = 0
+        for line in lines:
+            draw.text((0, y), line, fill=(0, 0, 0), font=font)
+            y += font.getsize(line)[1]
+            
+        image.save(output_image)
+
         with open(output_image, 'rb') as img_file:
             img_data = img_file.read()
         image_base64 = base64.b64encode(img_data).decode('utf-8')
