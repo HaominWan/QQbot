@@ -57,6 +57,7 @@ async def execute_function(ws, message):
 .draw           AI绘图
 .typ/.typst     Typst渲染
 .md/.markdown   Markdown渲染
+.YGO            查询卡片信息
 ========================'''
                 await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"](help_message))
 
@@ -84,7 +85,7 @@ async def execute_function(ws, message):
                     await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"]("抱歉，目前无法为您提供绘图服务，请尝试使用其他指令。"))
                     
             elif message_content.startswith(".typ") or message_content.startswith(".typst"):
-                image_cq_code = await typst.handle_typst_message(message_content)
+                image_cq_code = await typst_renderer.handle_typst_message(message_content)
                 try:
                     await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"](image_cq_code))
                 except:
@@ -96,6 +97,13 @@ async def execute_function(ws, message):
                     await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"](image_cq_code))
                 except:
                     await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"]("抱歉，目前无法为您提供Markdown渲染服务，请尝试使用其他指令。"))  
+
+            elif message_content.startswith(".YGO"):
+                card_info = await YGO_find_card.get_card_info(message_content[5:])
+                try:
+                    await bot_interfaces["send_group_message"](ws, group_id, card_info)
+                except:
+                    await bot_interfaces["send_group_message"](ws, group_id, "抱歉，未找到相关卡片信息。")
 
             elif message["message"][0]["type"] == "reply" and message["message"][2]["type"] == "at":
                 if str(bot_interfaces["bot_qq"]) == message["message"][2]["data"]["qq"]:
@@ -142,6 +150,7 @@ async def execute_function(ws, message):
 .draw           AI绘图
 .typ/.typst     Typst渲染
 .md/.markdown   Markdown渲染
+.YGO            查询卡片信息
 ========================'''
                 await bot_interfaces["send_private_message"](ws, user_id, await bot_interfaces["decode_CQ_to_message"](help_message))
                 
@@ -163,7 +172,7 @@ async def execute_function(ws, message):
                     await bot_interfaces["send_private_message"](ws, user_id, await bot_interfaces["decode_CQ_to_message"]("抱歉，目前无法为您提供绘图服务，请尝试使用其他指令。"))
                     
             elif message_content.startswith(".typ") or message_content.startswith(".typst"):
-                image_cq_code = await typst.handle_typst_message(message_content)               
+                image_cq_code = await typst_renderer.handle_typst_message(message_content)               
                 try:
                     await bot_interfaces["send_private_message"](ws, user_id, await bot_interfaces["decode_CQ_to_message"](image_cq_code))
                 except:
@@ -173,7 +182,13 @@ async def execute_function(ws, message):
                 try: 
                     await bot_interfaces["send_private_message"](ws, user_id, await bot_interfaces["decode_CQ_to_message"](image_cq_code))
                 except:
-                    await bot_interfaces["send_private_message"](ws, user_id, await bot_interfaces["decode_CQ_to_message"]("抱歉，目前无法为您提供Markdown渲染服务，请尝试使用其他指令。"))  
+                    await bot_interfaces["send_private_message"](ws, user_id, await bot_interfaces["decode_CQ_to_message"]("抱歉，目前无法为您提供Markdown渲染服务，请尝试使用其他指令。"))
+            elif message_content.startswith(".YGO"):
+                card_info = await YGO_find_card.get_card_info(message_content[5:])
+                try:
+                    await bot_interfaces["send_private_message"](ws, user_id, card_info)
+                except:
+                    await bot_interfaces["send_private_message"](ws, user_id, "抱歉，未找到相关卡片信息。")  
 
             else:
                 if len(message_image_url) != 0:

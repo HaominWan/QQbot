@@ -1,3 +1,4 @@
+import bot
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.common.keys import Keys
@@ -6,8 +7,22 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 
 async def handle_card_info(card_info):
-    
-    pass
+    CQ_code = card_info["name"]
+    image_url = card_info["image_url"]
+    CQ_code += f"[CQ:image,file={image_url},type=show,id = 40000]" 
+    for info in card_info["card_type"]:
+        CQ_code += f"{info} "
+    CQ_code += "\n"
+    if card_info["card_type"][0] == "怪兽":
+        if card_info["card_type"][2] == "连接":
+            CQ_code += f"LINK: {card_info['LINK']} ATK: {card_info['atk']} {card_info['race']}/{card_info['element']}\n"
+        elif card_info["card_type"][2] == "XYZ":
+            CQ_code += f"CLASS: {card_info['CLASS']} ATK: {card_info['atk']} DEF: {card_info['def']} {card_info['race']}/{card_info['element']}\n"
+        else:
+            CQ_code += f"STAR: {card_info['STAR']} ATK: {card_info['atk']} DEF: {card_info['def']} {card_info['race']}/{card_info['element']}\n"
+    CQ_code += f"效果: {card_info['effect']}"
+    return await bot.bot_interfaces["decode_CQ_to_message"](CQ_code)
+
 async def get_card_info(card_name):
     services = ChromeService(executable_path="")
     options = webdriver.ChromeOptions()
@@ -23,7 +38,7 @@ async def get_card_info(card_name):
         )
         cards = driver.find_elements(By.CLASS_NAME, "card-item")[:10]
         for card in cards:
-            card_info = []
+            card_info = {}
             name = card.find_element(By.TAG_NAME, "h3").text.strip()
             effect = card.find_element(By.CLASS_NAME, "effect").text.strip()
             card_type_elements = card.find_elements(By.CSS_SELECTOR, ".type a")
@@ -35,43 +50,34 @@ async def get_card_info(card_name):
             image_url = driver.find_element(By.CLASS_NAME, "card-img").get_attribute("src")
             driver.back()
 
-            card_info.append({
-                "name": name,
-                "effect": effect,
-                "image_url": image_url,
-                "card_type": card_type
-            })
+            card_info["name"] = name
+            card_info["effect"] = effect
+            card_info["card_type"] = card_type
             
             if card_type[0] is '怪兽':
                 if card_type[2] is '连接':
                     meta_info = driver.find_element(By.CLASS_NAME, "meta").text.strip()
                     meta_parts = meta_info.split(" / ")
-                    card_info.append({
-                        "LINK": str(meta_parts[0]),
-                        "atk": str(meta_parts[1]),
-                        "race": str(meta_parts[2]),
-                        "element": str(meta_parts[3])
-                    })
+                    card_info["LINK"] = str(meta_parts[0])
+                    card_info["atk"] = str(meta_parts[1])
+                    card_info["race"] = str(meta_parts[2])
+                    card_info["element"] = str(meta_parts[3])
                 if card_type[2] is 'XYZ':
                     meta_info = driver.find_element(By.CLASS_NAME, "meta").text.strip()
                     meta_parts = meta_info.split(" / ")
-                    card_info.append({
-                        "CLASS": str(meta_parts[0]),
-                        "atk": str(meta_parts[1]),
-                        "def": str(meta_parts[2]),
-                        "race": str(meta_parts[3]),
-                        "element": str(meta_parts[4])
-                    })
+                    card_info["CLASS"] = str(meta_parts[0])
+                    card_info["atk"] = str(meta_parts[1])
+                    card_info["def"] = str(meta_parts[2])
+                    card_info["race"] = str(meta_parts[3])
+                    card_info["element"] = str(meta_parts[4])
                 else:
                     meta_info = driver.find_element(By.CLASS_NAME, "meta").text.strip()
                     meta_parts = meta_info.split(" / ")
-                    card_info.append({
-                        "STAR": str(meta_parts[0]),
-                        "atk": str(meta_parts[1]),
-                        "def": str(meta_parts[2]),
-                        "race": str(meta_parts[3]),
-                        "element": str(meta_parts[4])
-                    })
+                    card_info["STAR"] = str(meta_parts[0])
+                    card_info["atk"] = str(meta_parts[1])
+                    card_info["def"] = str(meta_parts[2])
+                    card_info["race"] = str(meta_parts[3])
+                    card_info["element"] = str(meta_parts[4])
             message_box.append(await handle_card_info(card_info))
         return message_box
     finally:
