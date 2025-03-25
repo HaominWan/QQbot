@@ -113,6 +113,21 @@ async def execute_function(ws, message):
                 except:
                     await bot_interfaces["send_group_message"](ws, group_id, "怪盗团有点繁忙")
 
+            elif message_content.startswith(".jm") or message_content.startswith(".JM"):
+                jm_pdf = await jm2pdf.get_pdf(message_content[4:])
+                if jm_pdf == 0:
+                    await bot_interfaces["send_group_message"](ws, group_id, "抱歉，未找到相关本子信息。")
+                else:
+                    try:
+                        await bot_interfaces["upload_group_file"](group_id, jm_pdf, {message_content[4:] + ".pdf"}, "jm")
+                        await bot_interfaces["send_group_message"](ws, group_id, "少🦌点哟。")
+                        
+                    except:
+                        await bot_interfaces["send_group_message"](ws, group_id, "抱歉，查询功能暂时无法提供服务，请尝试使用其他指令。")
+                    finally:
+                        os.remove(jm_pdf)
+                        os.rmdir(f"Bot/tmp/{message_content[4:]}")
+
             elif message["message"][0]["type"] == "reply" and message["message"][2]["type"] == "at":
                 if str(bot_interfaces["bot_qq"]) == message["message"][2]["data"]["qq"]:
                     print("enter ai mode")
@@ -203,6 +218,20 @@ async def execute_function(ws, message):
                     await bot_interfaces["send_private_message"](ws, user_id, card_image)
                 except:
                     await bot_interfaces["send_private_message"](ws, user_id, "怪盗团有点繁忙")
+
+            elif message_content.startswith(".jm") or message_content.startswith(".JM"):
+                jm_pdf = await jm2pdf.get_pdf(message_content[4:])
+                if jm_pdf == 0:
+                    await bot_interfaces["send_private_message"](ws, user_id, "抱歉，未找到相关本子信息。")
+                else:
+                    try:
+                        await bot_interfaces["upload_private_file"](user_id, jm_pdf, {message_content[4:] + ".pdf"})
+                        await bot_interfaces["send_private_message"](ws, user_id, "少🦌点哟。")
+                    except:
+                        await bot_interfaces["send_private_message"](ws, user_id, "抱歉，查询功能暂时无法提供服务，请尝试使用其他指令。")
+                    finally:
+                        os.remove(jm_pdf)
+                        os.rmdir(f"Bot/tmp/{message_content[4:]}")
 
             else:
                 if len(message_image_url) != 0:
