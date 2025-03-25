@@ -7,6 +7,7 @@ import time
 import traceback
 import os
 import importlib
+import requests
 
 from plugins import *
 
@@ -187,6 +188,38 @@ async def send_private_message(ws:websockets.WebSocketClientProtocol, user_id, m
             print("[Lagrange Core]No response received or crash signal triggered")
         return None
 
+async def upload_group_file(group_id, file, name, folder):
+    url = '/upload_group_file'
+
+    payload = json.dumps({
+        "group_id": group_id,
+        "file": file,
+        "name": name,
+        "folder": folder
+    })
+
+    headers = {
+        'Content-Type': 'application/json'
+    }
+
+    response = requests.request("8080", url, headers=headers, data=payload)
+    pass
+
+async def upload_private_file(user_id, file, name):
+    url = "/upload_private_file"
+
+    payload = json.dumps({
+        "user_id": user_id,
+        "file": file,
+        "name": name
+    })
+
+    headers={
+        'Content-Type': 'application/json',
+    }
+
+    response = requests.request("8080", url, headers=headers, data=payload)
+
 async def withdraw_group_message(ws:websockets.WebSocketClientProtocol, message_id):
     if message_id == None:
         return None
@@ -308,8 +341,9 @@ def set_interfaces():
         "decode_CQ_to_message": decode_CQ_to_message,
         "test_if_super_user": test_if_super_user,
         "bot_qq": bot_qq,
-        "proxy_url": proxy_url
-        
+        "proxy_url": proxy_url,
+        "upload_group_file": upload_group_file,
+        "upload_private_file": upload_private_file,
     }
 
 
