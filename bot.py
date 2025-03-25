@@ -188,7 +188,7 @@ async def send_private_message(ws:websockets.WebSocketClientProtocol, user_id, m
             print("[Lagrange Core]No response received or crash signal triggered")
         return None
 
-async def upload_group_file(group_id, file, name, folder):
+async def upload_group_file(ws:websockets.WebSocketClientProtocol, group_id, file, name, folder):
     url = '/upload_group_file'
 
     payload = json.dumps({
@@ -203,22 +203,77 @@ async def upload_group_file(group_id, file, name, folder):
     }
 
     response = requests.request("8080", url, headers=headers, data=payload)
-    pass
-
-async def upload_private_file(user_id, file, name):
-    url = "/upload_private_file"
-
-    payload = json.dumps({
-        "user_id": user_id,
-        "file": file,
-        "name": name
-    })
-
-    headers={
-        'Content-Type': 'application/json',
+    global echo_counter
+    echo_counter += 1
+    self_echo = str(echo_counter)
+    json_data = {
+        "action": "upload_group_file",
+        "params": {
+            "group_id": group_id,
+            "file": file,
+            "name": name,
+            "folder": folder
+        },
+        "echo": self_echo
     }
 
-    response = requests.request("8080", url, headers=headers, data=payload)
+    await ws.send(json.dumps(json_data))
+
+    while self_echo not in echo_dict and not crash_signal:
+        await asyncio.sleep(0.1)
+    response = echo_dict[self_echo]
+    del echo_dict[self_echo]
+    print("[Lagrange Core]Response:",response)
+    if "status" in response:
+        if response["status"] == "ok":
+            print("[Lagrange Core]File uploaded successfully")
+        else:
+            print("[Lagrange Core]Failed to upload file")
+    return None
+
+
+async def upload_private_file(ws:websockets.WebSoketClientProtocol, user_id, file, name):
+    # url = "/upload_private_file"
+
+    # payload = json.dumps({
+        # "user_id": user_id,
+        # "file": file,
+        # "name": name
+    # })
+
+    # headers={
+        # 'Content-Type': 'application/json',
+    # }
+
+    # response = requests.request("8080", url, headers=headers, data=payload)
+
+    global echo_counter
+    echo_counter += 1
+    self_echo = str(echo_counter)
+    json_data = {
+        "action": "upload_private_file",
+        "params": {
+            "user_id": user_id,
+            "file": file,
+            "name": name
+        },
+        "echo": self_echo
+    }
+
+    await ws.send(json.dumps(json_data))
+
+    while self_echo not in echo_dict and not crash_signal:
+        await asyncio.sleep(0.1)
+    response = echo_dict[self_echo]
+    del echo_dict[self_echo]
+    print("[Lagrange Core]Response:",response)
+    if "status" in response:
+        if response["status"] == "ok":
+            print("[Lagrange Core]File uploaded successfully")
+        else:
+            print("[Lagrange Core]Failed to upload file")
+    return None
+
 
 async def withdraw_group_message(ws:websockets.WebSocketClientProtocol, message_id):
     if message_id == None:
