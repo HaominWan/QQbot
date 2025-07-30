@@ -9,7 +9,7 @@ async def call_groq_api(chat_history):
         
         response = client.chat.completions.create(
             messages=chat_history,
-            model="llama-3.2-90b-text-preview",
+            model="llama-3.2-90b-vision-preview",
             temperature=1,
             top_p=1,
             stream=True,

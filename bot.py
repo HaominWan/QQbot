@@ -232,7 +232,7 @@ async def upload_group_file(ws:websockets.WebSocketClientProtocol, group_id, fil
     return None
 
 
-async def upload_private_file(ws:websockets.WebSoketClientProtocol, user_id, file, name):
+async def upload_private_file(ws:websockets.WebSocketClientProtocol, user_id, file, name):
     # url = "/upload_private_file"
 
     # payload = json.dumps({

@@ -6,12 +6,12 @@ import base64
 import chardet
 import requests
 
-from groq import Groq
 from openai import OpenAI
 from models import *
 from api import *
 from config import *
 from plugins import *
+from command_handlers import CommandHandler, CommandType, MessageType
  
 async def handle_image_message(message_url, message_content):
     message_content += ' </image>prompt: '
@@ -21,8 +21,9 @@ async def handle_image_message(message_url, message_content):
         message_content += " | "
 
 async def handler_init(interfaces):
-    global bot_interfaces
+    global bot_interfaces, command_handler
     bot_interfaces = interfaces
+    command_handler = CommandHandler(interfaces)
     
 async def handler_release():
     pass
@@ -50,83 +51,14 @@ async def execute_function(ws, message):
             print(message_content)
             print(message["message"][0]["type"] == 'at')
             
-            if message_content.startswith(".help"):
-                help_message = '''========================
-.help           插件信息
-.reset          重置对话
-.draw           AI绘图
-.typ/.typst     Typst渲染
-.md/.markdown   Markdown渲染
-.YGO            查询卡片信息
-.P5             预告信
-========================'''
-                await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"](help_message))
-
-            elif message_content.startswith(".reset"):
-                group = Group(group_id, bot_interfaces["bot_qq"])
-                if bot_interfaces["test_if_super_user"](user_id):
-                    try:
-                        group.chat_history = []
-                        reset_message = "重置成功"
-                        await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"](reset_message))
-                    except:
-                        reset_message = "重置失败"
-                        await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"](reset_message))
-                else:
-                    reset_message = "抱歉，您没有权限重置对话"
-                    await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"](reset_message))
-
-            elif message_content.startswith(".draw"):
-                image_cq_code = await drawing.handle_drawing_message(message_content)
-                if image_cq_code == None:
-                    image_cq_code = "抱歉，目前无法为您提供绘图服务，请尝试使用其他指令。"
-                try:
-                    await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"](image_cq_code))
-                except:
-                    await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"]("抱歉，目前无法为您提供绘图服务，请尝试使用其他指令。"))
-                    
-            elif message_content.startswith(".typ") or message_content.startswith(".typst"):
-                image_cq_code = await typst_renderer.handle_typst_message(message_content)
-                try:
-                    await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"](image_cq_code))
-                except:
-                    await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"]("抱歉，目前无法为您提供Typst渲染服务，请尝试使用其他指令。"))
-
-            elif message_content.startswith(".md") or message_content.startswith('.markdown'):
-                image_cq_code = await markdown.handle_markdown_message(message_content)
-                try: 
-                    await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"](image_cq_code))
-                except:
-                    await bot_interfaces["send_group_message"](ws, group_id, await bot_interfaces["decode_CQ_to_message"]("抱歉，目前无法为您提供Markdown渲染服务，请尝试使用其他指令。"))  
-
-            elif message_content.startswith(".YGO"):
-                card_info = await YGO_find_card.get_card_info(message_content[5:])
-                try:
-                    await bot_interfaces["send_group_message"](ws, group_id, card_info)
-                except:
-                    await bot_interfaces["send_group_message"](ws, group_id, "抱歉，未找到相关卡片信息。")
-                    
-            elif message_content.startswith(".P5") or message_content.startswith(".p5"):
-                card_image = await P5_card.get_card(message_content[4:])
-                try:
-                    await bot_interfaces["send_group_message"](ws, group_id, card_image)
-                except:
-                    await bot_interfaces["send_group_message"](ws, group_id, "怪盗团有点繁忙")
-
-            elif message_content.startswith(".jm") or message_content.startswith(".JM"):
-                jm_pdf = await jm2pdf.get_pdf(message_content[4:])
-                if jm_pdf == 0:
-                    await bot_interfaces["send_group_message"](ws, group_id, "抱歉，未找到相关本子信息。")
-                else:
-                    try:
-                        await bot_interfaces["upload_group_file"](group_id, jm_pdf, {message_content[4:] + ".pdf"}, "jm")
-                        await bot_interfaces["send_group_message"](ws, group_id, "少🦌点哟。")
-                        
-                    except:
-                        await bot_interfaces["send_group_message"](ws, group_id, "抱歉，查询功能暂时无法提供服务，请尝试使用其他指令。")
-                    finally:
-                        os.remove(jm_pdf)
-                        os.rmdir(f"Bot/tmp/{message_content[4:]}")
+            # 使用命令处理器处理命令
+            command_type = command_handler.get_command_type(message_content)
+            if command_type:
+                await command_handler.handle_command(
+                    ws, MessageType.GROUP, command_type, message_content,
+                    group_id=group_id, user_id=user_id, message_id=message_id
+                )
+                return
 
             elif message["message"][0]["type"] == "reply" and message["message"][2]["type"] == "at":
                 if str(bot_interfaces["bot_qq"]) == message["message"][2]["data"]["qq"]:
@@ -165,78 +97,19 @@ async def execute_function(ws, message):
             message_content = await bot_interfaces["encode_message_to_CQ"](message['message'])
             print(message_content)
 
-            if message_content.startswith(".help"):
-                help_message = '''========================
-.help           插件信息
-.reset          重置对话
-.draw           AI绘图
-.typ/.typst     Typst渲染
-.md/.markdown   Markdown渲染
-.YGO            查询卡片信息
-.P5             预告信
-========================'''
-                await bot_interfaces["send_private_message"](ws, user_id, await bot_interfaces["decode_CQ_to_message"](help_message))
-                
-            elif message_content.startswith(".reset"):
-                user = User(user_id, bot_interfaces["test_if_super_user"](user_id), bot_interfaces["bot_qq"])
-                try:
-                    user.chat_history = []
-                    reset_message = "重置成功"
-                    await bot_interfaces["send_private_message"](ws, user_id, await bot_interfaces["decode_CQ_to_message"](reset_message))
-                except:
-                    reset_message = "重置失败"
-                    await bot_interfaces["send_private_message"](ws, user_id, await bot_interfaces["decode_CQ_to_message"](reset_message))
-                pass
-            elif message_content.startswith(".draw"):
-                image_cq_code = await drawing.handle_drawing_message(message_content)
-                try:
-                    await bot_interfaces["send_private_message"](ws, user_id, await bot_interfaces["decode_CQ_to_message"](image_cq_code))
-                except:
-                    await bot_interfaces["send_private_message"](ws, user_id, await bot_interfaces["decode_CQ_to_message"]("抱歉，目前无法为您提供绘图服务，请尝试使用其他指令。"))
-                    
-            elif message_content.startswith(".typ") or message_content.startswith(".typst"):
-                image_cq_code = await typst_renderer.handle_typst_message(message_content)               
-                try:
-                    await bot_interfaces["send_private_message"](ws, user_id, await bot_interfaces["decode_CQ_to_message"](image_cq_code))
-                except:
-                    await bot_interfaces["send_private_message"](ws, user_id, await bot_interfaces["decode_CQ_to_message"]("抱歉，目前无法为您提供Typst渲染服务，请尝试使用其他指令。"))
-            elif message_content.startswith(".md") or message_content.startswith('.markdown'):
-                image_cq_code = await markdown.handle_markdown_message(message_content)
-                try: 
-                    await bot_interfaces["send_private_message"](ws, user_id, await bot_interfaces["decode_CQ_to_message"](image_cq_code))
-                except:
-                    await bot_interfaces["send_private_message"](ws, user_id, await bot_interfaces["decode_CQ_to_message"]("抱歉，目前无法为您提供Markdown渲染服务，请尝试使用其他指令。"))
-            elif message_content.startswith(".YGO"):
-                card_info = await YGO_find_card.get_card_info(message_content[5:])
-                try:
-                    await bot_interfaces["send_private_message"](ws, user_id, card_info)
-                except:
-                    await bot_interfaces["send_private_message"](ws, user_id, "抱歉，未找到相关卡片信息。")  
-            elif message_content.startswith(".P5"):
-                card_image = await P5_card.get_card(message_content[4:])
-                try:
-                    await bot_interfaces["send_private_message"](ws, user_id, card_image)
-                except:
-                    await bot_interfaces["send_private_message"](ws, user_id, "怪盗团有点繁忙")
-
-            elif message_content.startswith(".jm") or message_content.startswith(".JM"):
-                jm_pdf = await jm2pdf.get_pdf(message_content[4:])
-                if jm_pdf == 0:
-                    await bot_interfaces["send_private_message"](ws, user_id, "抱歉，未找到相关本子信息。")
-                else:
-                    try:
-                        await bot_interfaces["upload_private_file"](user_id, jm_pdf, {message_content[4:] + ".pdf"})
-                        await bot_interfaces["send_private_message"](ws, user_id, "少🦌点哟。")
-                    except:
-                        await bot_interfaces["send_private_message"](ws, user_id, "抱歉，查询功能暂时无法提供服务，请尝试使用其他指令。")
-                    finally:
-                        os.remove(jm_pdf)
-                        os.rmdir(f"Bot/tmp/{message_content[4:]}")
+            # 使用命令处理器处理命令
+            command_type = command_handler.get_command_type(message_content)
+            if command_type:
+                await command_handler.handle_command(
+                    ws, MessageType.PRIVATE, command_type, message_content,
+                    user_id=user_id, message_id=message_id
+                )
+                return
 
             else:
                 if len(message_image_url) != 0:
                     await handle_image_message(message_image_url, message_content)
-                user = User(user_id, user_id in bot.super_users, bot_interfaces["bot_qq"])
+                user = User(user_id, bot_interfaces["test_if_super_user"](user_id), bot_interfaces["bot_qq"])
                 gpt_response = await user.handle_message(message_content)
                 return await bot_interfaces["send_private_message"](ws, user_id, await bot_interfaces["decode_CQ_to_message"](gpt_response))
 
