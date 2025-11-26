@@ -15,13 +15,12 @@ client:
   # 可配置特定域名，如下：
   # 程序会先用第一个域名，如果第一个域名重试n次失败，则换下一个域名重试，以此类推。
   domain:
-    # - jm-comic.org
-    # - jm-comic2.cc
+    - 18comic.org
     - 18comic.vip
-    # - 18comic.org
+    - jm-comic2.cc
 
-  # retry_times: 请求失败重试次数，默认为5
-  retry_times: 5
+  # retry_times: 请求失败重试次数，增加重试次数提高成功率
+  retry_times: 10
 
   # postman: 请求配置
   postman:
@@ -35,7 +34,10 @@ client:
       # proxies:
       #   http: 127.0.0.1:7890
       #   https: 127.0.0.1:7890
-      proxies: system
+      proxies: null
+
+      # SSL验证设置 - 跳过SSL验证以避免证书问题
+      verify: false
 
       # cookies: 帐号配置，默认是 null，表示未登录状态访问JM。
       # 禁漫的大部分本子，下载是不需要登录的；少部分敏感题材需要登录才能看。
@@ -45,8 +47,11 @@ client:
       # cookies是区分域名的：
       # 假如你要访问的是 `18comic.vip`，那么你配置的cookies也要来自于 `18comic.vip`，不能配置来自于 `jm-comic.club` 的cookies。
       # 如果你发现配置了cookies还是没有效果，大概率就是你配置的cookies和代码访问的域名不一致。
+      headers: {}
       cookies:
-        AVS: qkwehjjasdowqeq # 这个值是乱打的，不能用
+        # 需要有效的AVS cookie才能访问内容
+        # 可以从浏览器开发者工具中获取
+        # AVS: 在此处填入有效的AVS cookie值
 
 # 下载配置
 download:
@@ -55,13 +60,13 @@ download:
     decode: true # JM的原图是混淆过的，要不要还原？默认为true
     suffix: .jpg # 把图片都转为.jpg格式，默认为null，表示不转换。
   threading:
-    # image: 同时下载的图片数，默认是30张图
+    # image: 同时下载的图片数，降低数值减少被检测风险
     # 数值大，下得快，配置要求高，对禁漫压力大
     # 数值小，下得慢，配置要求低，对禁漫压力小
     # PS: 禁漫网页一次最多请求50张图
-    image: 30
-    # photo: 同时下载的章节数，不配置默认是cpu的线程数。例如8核16线程的cpu → 16.
-    photo: 16
+    image: 5
+    # photo: 同时下载的章节数，降低数值减少被检测风险
+    photo: 2
 
 
 

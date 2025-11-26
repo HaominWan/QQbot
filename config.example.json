@@ -1,0 +1,15 @@
+{
+  "api_keys": {
+    "openai": "YOUR_OPENAI_API_KEY",
+    "gemini": "YOUR_GEMINI_API_KEY",
+    "groq": "YOUR_GROQ_API_KEY",
+    "prodia": "YOUR_PRODIA_API_KEY"
+  },
+  "bot_settings": {
+    "super_users": [123456789],
+    "test_groups": [123456789],
+    "host": "127.0.0.1",
+    "port": "8080",
+    "proxy_url": "http://127.0.0.1:7890"
+  }
+}

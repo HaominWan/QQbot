@@ -29,8 +29,9 @@ class MessageType(Enum):
 class CommandHandler:
     """命令处理器类"""
     
-    def __init__(self, bot_interfaces):
+    def __init__(self, bot_interfaces, user_sessions):
         self.bot_interfaces = bot_interfaces
+        self.user_sessions = user_sessions  # 存储对 user_sessions 的引用
         self.help_message = '''========================
 .help           插件信息
 .reset          重置对话
@@ -228,25 +229,47 @@ class CommandHandler:
 
     # 私聊命令处理器
     async def _handle_help_private(self, ws, message_content: str, user_id: int, **kwargs):
-        await self.bot_interfaces["send_private_message"](
-            ws, user_id, 
-            await self.bot_interfaces["decode_CQ_to_message"](self.help_message)
-        )
+        # 检查是否为超级用户
+        if self.bot_interfaces["test_if_super_user"](user_id):
+            # 超级用户收到管理员回复
+            from roles import get_Murasame_goshujin_role
+            admin_response = "主人，有何吩咐？本座已准备好为您服务。"
+            await self.bot_interfaces["send_private_message"](
+                ws, user_id, 
+                await self.bot_interfaces["decode_CQ_to_message"](admin_response)
+            )
+        else:
+            # 普通用户收到角色扮演回复
+            from roles import get_Murasame_customs_role
+            role_response = "汝需要何种帮助？（缓缓睁开双眼，目光平静地注视着对方）说吧，本座姑且听之。吾乃丛雨丸之魂，守护此地五百余年，若有疑问或求助之事，本座愿聆听并给予指引。希望能帮到汝。（说完便再次闭上眼睛，仿佛陷入沉思）"
+            await self.bot_interfaces["send_private_message"](
+                ws, user_id, 
+                await self.bot_interfaces["decode_CQ_to_message"](role_response)
+            )
 
     async def _handle_reset_private(self, ws, message_content: str, user_id: int, **kwargs):
-        user = User(user_id, self.bot_interfaces["test_if_super_user"](user_id), self.bot_interfaces["bot_qq"])
-        try:
-            user.chat_history = []
-            reset_message = "重置成功"
+        # 直接从 self.user_sessions 中获取会话
+        user_session = self.user_sessions.get(user_id)
+        if user_session:
+            try:
+                user_session.chat_history = []
+                reset_message = "重置成功"
+                await self.bot_interfaces["send_private_message"](
+                    ws, user_id, 
+                    await self.bot_interfaces["decode_CQ_to_message"](reset_message)
+                )
+            except Exception as e:
+                print(f"Error resetting private session for {user_id}: {e}")
+                reset_message = "重置失败"
+                await self.bot_interfaces["send_private_message"](
+                    ws, user_id, 
+                    await self.bot_interfaces["decode_CQ_to_message"](reset_message)
+                )
+        else:
+            # 如果会话不存在，可以选择发送一条消息提示用户
             await self.bot_interfaces["send_private_message"](
                 ws, user_id, 
-                await self.bot_interfaces["decode_CQ_to_message"](reset_message)
-            )
-        except:
-            reset_message = "重置失败"
-            await self.bot_interfaces["send_private_message"](
-                ws, user_id, 
-                await self.bot_interfaces["decode_CQ_to_message"](reset_message)
+                await self.bot_interfaces["decode_CQ_to_message"]("您还没有开始对话，无需重置。")
             )
 
     async def _handle_draw_private(self, ws, message_content: str, user_id: int, **kwargs):

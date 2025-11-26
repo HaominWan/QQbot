@@ -27,9 +27,22 @@ class User:
     def get_chat_history(self):
         return self.chat_history
     
-    async def handle_message(self, message_content):
+    async def handle_message(self, message_content, system_role):
+        print(f"[Debug] User.handle_message called with system_role length: {len(system_role)}")
+        print(f"[Debug] System role preview: {system_role[:200]}...")
         
         self.add_message("user", message_content)
-        gpt_response = await call_groq_api(self.chat_history)
+        
+        # Create a temporary chat history with the provided system role
+        tmp_chat_history = self.chat_history.copy()
+        # Find and replace the system message
+        for i, msg in enumerate(tmp_chat_history):
+            if msg["role"] == "system":
+                tmp_chat_history[i] = {"role": "system", "content": system_role}
+                break
+        else: # If no system message exists, add one
+            tmp_chat_history.insert(0, {"role": "system", "content": system_role})
+
+        gpt_response = await call_groq_api(tmp_chat_history)
         self.add_message("assistant", gpt_response)
         return gpt_response

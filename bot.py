@@ -10,26 +10,30 @@ import importlib
 import requests
 
 from plugins import *
+from config import HOST, PORT, PROXY_URL, SUPER_USERS
 
-Host = "127.0.0.1"
-Port = "8080"
+Host = HOST
+Port = PORT
 websocket_url = f"ws://{Host}:{Port}"
 
 bot_qq = 0
 
-super_users = [1000000002]
+super_users = SUPER_USERS
 
 echo_counter = 0
 echo_dict = {}
 running_tasks = []
 
-proxy_url = "http://127.0.0.1:7890"
+proxy_url = PROXY_URL
 
 crash_signal = False
 
 
 def test_if_super_user(user_id):
-    return user_id in super_users
+    print(f"[Debug] Checking super user status for {user_id}, super_users list: {super_users}")
+    result = user_id in super_users
+    print(f"[Debug] Super user check result: {result}")
+    return result
 
 async def get_message_by_id(ws:websockets.WebSocketClientProtocol, message_id):
     global echo_counter
