@@ -1,1 +1,22 @@
-/myenv
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environment
+myenv/
+venv/
+env/
+
+# Bot Configuration
+config.json
+
+# Temporary files
+tmp/
+*.log
+
+# VS Code
+.vscode/
+
+# JetBrains
+.idea/
