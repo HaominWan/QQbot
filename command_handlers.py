@@ -17,6 +17,7 @@ _RESTART_SCRIPT = os.path.join(
 class CommandType(Enum):
     HELP = "help"
     RESET = "reset"
+    STOP = "stop"
     CLEAN = "clean"
     DRAW = "draw"
     TYPST = "typst"
@@ -42,6 +43,7 @@ class CommandHandler:
         self.help_message = """========================
 .help              查看此帮助
 .reset             重启 Bot            ★
+.stop              强制停止 Bot        ★
 .clean             清空当前群记忆      ★
 .draw              AI 绘图
 .typ / .typst      Typst 渲染
@@ -71,6 +73,14 @@ class CommandHandler:
                     group_handler=self._handle_reset_group,
                     private_handler=self._handle_reset_private,
                     description="重启 Bot",
+                ),
+                Tool(
+                    name="stop",
+                    command_type=CommandType.STOP,
+                    prefixes=[".stop"],
+                    group_handler=self._handle_stop_group,
+                    private_handler=self._handle_stop_private,
+                    description="强制停止 Bot",
                 ),
                 Tool(
                     name="clean",
@@ -205,6 +215,29 @@ class CommandHandler:
             ["cmd.exe", "/c", _RESTART_SCRIPT],
             creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
         )
+
+    async def _handle_stop_group(
+        self,
+        ws,
+        message_content: str,
+        group_id: int,
+        user_id: int,
+        **kwargs,
+    ):
+        if not self.bot_interfaces["test_if_super_user"](user_id):
+            await self._send_group_text(ws, group_id, "权限不足，仅超级用户可停止 Bot")
+            return
+        await self._send_group_text(ws, group_id, "Bot 已停止，再见~")
+        await asyncio.sleep(0.8)
+        os._exit(0)
+
+    async def _handle_stop_private(self, ws, message_content: str, user_id: int, **kwargs):
+        if not self.bot_interfaces["test_if_super_user"](user_id):
+            await self._send_private_text(ws, user_id, "权限不足，仅超级用户可停止 Bot")
+            return
+        await self._send_private_text(ws, user_id, "Bot 已停止，再见~")
+        await asyncio.sleep(0.8)
+        os._exit(0)
 
     async def _handle_clean_group(
         self,
