@@ -11,6 +11,7 @@ from plugins.stickers import sticker_to_segment
 _SPECIAL_RE   = re.compile(r'(<render_md>.*?</render_md>|<sticker:\w+>)', re.DOTALL)
 _RENDER_MD_RE = re.compile(r'<render_md>(.*?)</render_md>', re.DOTALL)
 _STICKER_RE   = re.compile(r'<sticker:(\w+)>')
+_CQ_RE        = re.compile(r'\[CQ:[^\]]*\]')
 
 
 MultimodalProcessor = Callable[[list, str], Awaitable[str]]
@@ -164,6 +165,7 @@ class AgentOrchestrator:
             elif part.startswith('<render_md>'):
                 md_match = _RENDER_MD_RE.match(part)
                 md_content = md_match.group(1).strip() if md_match else part
+                md_content = _CQ_RE.sub('', md_content)
                 try:
                     img_b64 = await markdown_to_image(md_content)
                     result.append({"type": "image", "data": {"file": f"base64://{img_b64}"}})

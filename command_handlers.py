@@ -10,7 +10,7 @@ from tool_router import Tool, ToolRouter, ToolScope
 
 _RESTART_SCRIPT = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "restart.ps1",
+    "run.bat",
 )
 
 
@@ -192,12 +192,7 @@ class CommandHandler:
     async def _trigger_restart(self):
         await asyncio.sleep(0.8)
         subprocess.Popen(
-            [
-                "powershell",
-                "-NoProfile",
-                "-ExecutionPolicy", "Bypass",
-                "-File", _RESTART_SCRIPT,
-            ],
+            ["cmd.exe", "/c", _RESTART_SCRIPT],
             creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
         )
 
