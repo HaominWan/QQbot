@@ -45,7 +45,7 @@ class CommandHandler:
 .reset             重启 Bot            ★
 .stop              强制停止 Bot        ★
 .clean             清空当前群记忆      ★
-.draw              AI 绘图
+.draw              AI 绘图             🔧
 .typ / .typst      Typst 渲染
 .md / .markdown    Markdown 渲染
 .YGO               查询游戏王卡片
@@ -275,12 +275,10 @@ class CommandHandler:
         await self._send_private_text(ws, user_id, "私聊暂无向量记忆可清理")
 
     async def _handle_draw_group(self, ws, message_content: str, group_id: int, **kwargs):
-        image_cq_code = await drawing.handle_drawing_message(message_content)
-        await self._send_group_text(ws, group_id, image_cq_code or "绘图服务暂时不可用")
+        await self._send_group_text(ws, group_id, ".draw 指令正在维修中，暂时无法使用")
 
     async def _handle_draw_private(self, ws, message_content: str, user_id: int, **kwargs):
-        image_cq_code = await drawing.handle_drawing_message(message_content)
-        await self._send_private_text(ws, user_id, image_cq_code or "绘图服务暂时不可用")
+        await self._send_private_text(ws, user_id, ".draw 指令正在维修中，暂时无法使用")
 
     async def _handle_typst_group(self, ws, message_content: str, group_id: int, **kwargs):
         image_cq_code = await typst_renderer.handle_typst_message(message_content)
