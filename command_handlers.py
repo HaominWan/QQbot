@@ -228,15 +228,21 @@ class CommandHandler:
             await self._send_group_text(ws, group_id, "权限不足，仅超级用户可停止 Bot")
             return
         await self._send_group_text(ws, group_id, "Bot 已停止，再见~")
-        await asyncio.sleep(0.8)
-        os._exit(0)
+        await self._do_stop()
 
     async def _handle_stop_private(self, ws, message_content: str, user_id: int, **kwargs):
         if not self.bot_interfaces["test_if_super_user"](user_id):
             await self._send_private_text(ws, user_id, "权限不足，仅超级用户可停止 Bot")
             return
         await self._send_private_text(ws, user_id, "Bot 已停止，再见~")
+        await self._do_stop()
+
+    async def _do_stop(self):
         await asyncio.sleep(0.8)
+        subprocess.run(
+            ["taskkill", "/f", "/im", "QQ.exe"],
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        )
         os._exit(0)
 
     async def _handle_clean_group(
