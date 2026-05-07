@@ -239,8 +239,14 @@ class CommandHandler:
 
     async def _do_stop(self):
         await asyncio.sleep(0.8)
+        # Only kill the NapCat-injected QQ process (identified by --enable-logging).
+        # Plain personal QQ does not carry this flag and must not be touched.
         subprocess.run(
-            ["taskkill", "/f", "/im", "QQ.exe"],
+            [
+                "wmic", "process",
+                "where", "name='QQ.exe' and commandline like '%--enable-logging%'",
+                "call", "terminate",
+            ],
             creationflags=subprocess.CREATE_NO_WINDOW,
         )
         os._exit(0)
