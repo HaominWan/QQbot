@@ -1,46 +1,61 @@
+import asyncio
+import base64
 import os
 import time
-import base64
-import subprocess
-import chardet
+
+_PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
+_BOT_DIR    = os.path.dirname(_PLUGIN_DIR)
+_TMP_DIR    = os.path.join(_BOT_DIR, 'tmp')
+_RENDERER   = os.path.join(_PLUGIN_DIR, 'renderMarkdown.js')
+
 
 async def markdown_to_image(md_text: str) -> str:
-    temp_file = 'D:/QQbot/Bot/tmp/' + str(time.time()) + '.md'
-    output_image = temp_file.replace('.md', '.png')
+    """Render *md_text* to a PNG and return it as a base64 string."""
+    os.makedirs(_TMP_DIR, exist_ok=True)
+    ts      = str(time.time())
+    md_file = os.path.join(_TMP_DIR, ts + '.md')
+    out_file = os.path.join(_TMP_DIR, ts + '.png')
 
     try:
-        with open(temp_file, 'w', encoding='utf-8') as f:
+        with open(md_file, 'w', encoding='utf-8') as f:
             f.write(md_text)
 
-        subprocess.run(['node', 'Bot/plugins/renderMarkdown.js', md_text, output_image], check=True)
+        proc = await asyncio.create_subprocess_exec(
+            'node', _RENDERER, md_file, out_file,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        _, stderr = await proc.communicate()
+        if proc.returncode != 0:
+            raise RuntimeError(f"renderMarkdown.js failed: {stderr.decode(errors='replace')}")
 
-        with open(output_image, 'rb') as img_file:
-            img_data = img_file.read()
-        img_base64 = base64.b64encode(img_data).decode('utf-8')
-        return img_base64
+        with open(out_file, 'rb') as f:
+            img_data = f.read()
+        return base64.b64encode(img_data).decode('utf-8')
 
-    except Exception as e:
-        print("[Markdown Renderer] Error:", e)
-        raise e
-    
     finally:
-        if os.path.exists(temp_file):
-            os.remove(temp_file)
-        if os.path.exists(output_image):
-            os.remove(output_image)
+        for path in (md_file, out_file):
+            try:
+                os.remove(path)
+            except OSError:
+                pass
 
-async def handle_markdown_message(message_content):
-    md_data = message_content[4:].strip() if message_content.startswith(".md ") else message_content[10:].strip()
-    detected_encoding = chardet.detect(md_data.encode())['encoding']
-    if detected_encoding is None:
-        detected_encoding = 'utf-8'
-        
-    if detected_encoding != 'utf-8':
-        md_data = md_data.encode(detected_encoding).decode('utf-8')
 
-    image_base64 = await markdown_to_image(md_data)
-    image_cq_code = f"[CQ:image,file=base64://{image_base64},type=show,id=40000]"
+async def handle_markdown_message(message_content: str) -> str:
+    """Called by the .md command handler; returns a CQ image code."""
+    if message_content.startswith('.markdown'):
+        md_text = message_content[9:].strip()
+    elif message_content.startswith('.md'):
+        md_text = message_content[3:].strip()
+    else:
+        md_text = message_content.strip()
 
-    return image_cq_code
+    try:
+        image_b64 = await markdown_to_image(md_text)
+        return f"[CQ:image,file=base64://{image_b64}]"
+    except Exception as e:
+        print(f"[Markdown] render failed: {e}")
+        return f"Markdown 渲染失败：{e}"
 
-__all__ = ['markdown_to_image']
+
+__all__ = ['markdown_to_image', 'handle_markdown_message']

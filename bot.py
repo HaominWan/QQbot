@@ -52,7 +52,7 @@ async def get_message_by_id(ws:websockets.WebSocketClientProtocol, message_id):
         await asyncio.sleep(0.1)
     response = echo_dict[self_echo]
     del echo_dict[self_echo]
-    print("[Lagrange Core]Response:",response)
+    print("[NapCat]Response:",response)
     if "data" in response:
         return response["data"]
     return None
@@ -74,14 +74,14 @@ async def get_stranger_info(ws:websockets.WebSocketClientProtocol, user_id):
         await asyncio.sleep(0.1)
     response = echo_dict[self_echo]
     del echo_dict[self_echo]
-    print("[Lagrange Core]Response:",response)
+    print("[NapCat]Response:",response)
     if "data" in response:
         return response["data"]
     return None
 
 async def send_group_message(ws:websockets.WebSocketClientProtocol, group_id, message, auto_escape=False):
 # async def send_group_message(ws_url: str, group_id: str, message, auto_escape: bool =False):
-    print("[Lagrange Core]Sending message:", message)
+    print("[NapCat]Sending message:", message)
     global echo_counter
     echo_counter += 1
     self_echo = str(echo_counter)
@@ -103,18 +103,18 @@ async def send_group_message(ws:websockets.WebSocketClientProtocol, group_id, me
     # response = echo_dict.get(self_echo)
     # if response:
     #     del echo_dict[self_echo]
-    #     print ("[Lagrange Core]Response:",response)
+    #     print ("[NapCat]Response:",response)
     #     if "status" in response:
     #         if response["status"] == "ok":
-    #             print("[Lagrange Core]Message sent successfully")
+    #             print("[NapCat]Message sent successfully")
     #         else:
-    #             print("[Lagrange Core]Failed to send message")
+    #             print("[NapCat]Failed to send message")
     #     if response is None:
     #         return None
     #     if "data" in response and response["data"] != None and "message_id" in response["data"]:
     #         return response["data"]["message_id"]
     # else:
-    #     print("[Lagrange Core]No response received or crash signal triggered")
+    #     print("[NapCat]No response received or crash signal triggered")
     # return None
 
     async with aiohttp.ClientSession() as session:
@@ -124,22 +124,22 @@ async def send_group_message(ws:websockets.WebSocketClientProtocol, group_id, me
         response = echo_dict.get(self_echo)
         if response:
             del echo_dict[self_echo]
-            print("[Lagrange Core]Response:", response)
+            print("[NapCat]Response:", response)
             if "status" in response:
                 if response["status"] == "ok":
-                    print("[Lagrange Core]Message sent successfully")
+                    print("[NapCat]Message sent successfully")
                 else:
-                    print("[Lagrange Core]Failed to send message")
+                    print("[NapCat]Failed to send message")
             if response is None:
                 return None
             if "data" in response and response["data"] is not None and "message_id" in response["data"]:
                 return response["data"]["message_id"]
         else:
-            print("[Lagrange Core]No response received or crash signal triggered")
+            print("[NapCat]No response received or crash signal triggered")
         return None
 
 async def send_private_message(ws:websockets.WebSocketClientProtocol, user_id, message, auto_escape=False):
-    print("[Lagrange Core]Sending message:", message)
+    print("[NapCat]Sending message:", message)
     global echo_counter
     echo_counter += 1
     self_echo = str(echo_counter)
@@ -158,18 +158,18 @@ async def send_private_message(ws:websockets.WebSocketClientProtocol, user_id, m
     # response = echo_dict.get(self_echo)
     # if response:
     #     del echo_dict[self_echo]
-    #     print ("[Lagrange Core]Response:",response)
+    #     print ("[NapCat]Response:",response)
     #     if "status" in response:
     #         if response["status"] == "ok":
-    #             print("[Lagrange Core]Message sent successfully")
+    #             print("[NapCat]Message sent successfully")
     #         else:
-    #             print("[Lagrange Core]Failed to send message")
+    #             print("[NapCat]Failed to send message")
     #     if response == None:
     #         return None
     #     if "data" in response and response["data"] != None and "message_id" in response["data"]:
     #         return response["data"]["message_id"]
     # else:
-    #     print("[Lagrange Core]No response received or crash signal triggered")
+    #     print("[NapCat]No response received or crash signal triggered")
     # return None
     async with aiohttp.ClientSession() as session:
         await ws.send(json.dumps(json_data))
@@ -178,18 +178,18 @@ async def send_private_message(ws:websockets.WebSocketClientProtocol, user_id, m
         response = echo_dict.get(self_echo)
         if response:
             del echo_dict[self_echo]
-            print("[Lagrange Core]Response:", response)
+            print("[NapCat]Response:", response)
             if "status" in response:
                 if response["status"] == "ok":
-                    print("[Lagrange Core]Message sent successfully")
+                    print("[NapCat]Message sent successfully")
                 else:
-                    print("[Lagrange Core]Failed to send message")
+                    print("[NapCat]Failed to send message")
             if response is None:
                 return None
             if "data" in response and response["data"] is not None and "message_id" in response["data"]:
                 return response["data"]["message_id"]
         else:
-            print("[Lagrange Core]No response received or crash signal triggered")
+            print("[NapCat]No response received or crash signal triggered")
         return None
 
 async def upload_group_file(ws:websockets.WebSocketClientProtocol, group_id, file, name, folder):
@@ -227,12 +227,12 @@ async def upload_group_file(ws:websockets.WebSocketClientProtocol, group_id, fil
         await asyncio.sleep(0.1)
     response = echo_dict[self_echo]
     del echo_dict[self_echo]
-    print("[Lagrange Core]Response:",response)
+    print("[NapCat]Response:",response)
     if "status" in response:
         if response["status"] == "ok":
-            print("[Lagrange Core]File uploaded successfully")
+            print("[NapCat]File uploaded successfully")
         else:
-            print("[Lagrange Core]Failed to upload file")
+            print("[NapCat]Failed to upload file")
     return None
 
 
@@ -270,12 +270,12 @@ async def upload_private_file(ws:websockets.WebSocketClientProtocol, user_id, fi
         await asyncio.sleep(0.1)
     response = echo_dict[self_echo]
     del echo_dict[self_echo]
-    print("[Lagrange Core]Response:",response)
+    print("[NapCat]Response:",response)
     if "status" in response:
         if response["status"] == "ok":
-            print("[Lagrange Core]File uploaded successfully")
+            print("[NapCat]File uploaded successfully")
         else:
-            print("[Lagrange Core]Failed to upload file")
+            print("[NapCat]Failed to upload file")
     return None
 
 
@@ -298,12 +298,12 @@ async def withdraw_group_message(ws:websockets.WebSocketClientProtocol, message_
         await asyncio.sleep(0.1)
     response = echo_dict[self_echo]
     del echo_dict[self_echo]
-    print("[Lagrange Core]Response:",response)
+    print("[NapCat]Response:",response)
     if "status" in response:
         if response["status"] == "ok":
-            print("[Lagrange Core]Message withdrawn successfully")
+            print("[NapCat]Message withdrawn successfully")
         else:
-            print("[Lagrange Core]Failed to withdraw message")
+            print("[NapCat]Failed to withdraw message")
     return None
 
 #把消息转化为CQ码
@@ -358,21 +358,22 @@ async def decode_CQ_to_message(message):
             while j < len(message) and message[j] != "]":
                 j += 1
             if j < len(message):
-                cq_message = message[i + 1:j]
-                cq_message = cq_message.split(",")
-                cq_type = cq_message[0]
-                cq_data = {}
-                for x in cq_message[1:]:
-                    try:
-                        key, value = x.split("=", 1)
-                    except:
-                        key = x
-                        value = ""
-                    cq_data[key] = value
-                # remove "CQ:" prefix
-                if cq_type.startswith("CQ:"):
-                    cq_type = cq_type[3:]
-                decoded_message.append({"type": cq_type, "data": cq_data})
+                cq_content = message[i + 1:j]
+                if cq_content.startswith("CQ:"):
+                    cq_parts = cq_content.split(",")
+                    cq_type = cq_parts[0][3:]
+                    cq_data = {}
+                    for x in cq_parts[1:]:
+                        try:
+                            key, value = x.split("=", 1)
+                        except:
+                            key = x
+                            value = ""
+                        cq_data[key] = value
+                    decoded_message.append({"type": cq_type, "data": cq_data})
+                else:
+                    # Not a CQ code, treat as plain text
+                    decoded_message.append({"type": "text", "data": {"text": message[i:j + 1]}})
                 i = j + 1
             else:
                 decoded_message.append({"type": "text", "data": {"text": str(message[i:])}})
@@ -428,11 +429,14 @@ async def release_handlers():
 server_close_signal = False
 task_info = []
 async def serve():
-    async def serve_forever(ws):
+    async def serve_forever(ws, path=None):
         loop = asyncio.get_event_loop()
-        global handlers
+        global handlers, bot_qq
         unexcepted_error_happened = False
         retry = 0
+        print(f"[NapCat]NapCat connected from path: {path}")
+        if handlers is None:
+            await hot_reload("handlers")
         while not server_close_signal:
             try:
                 if unexcepted_error_happened:
@@ -444,7 +448,12 @@ async def serve():
                 response = await ws.recv()
                 
                 response = json.loads(response)
-                #print("[Lagrange Core]Received message: ", response)
+                #print("[NapCat]Received message: ", response)
+                if "self_id" in response and response["self_id"] != bot_qq:
+                    bot_qq = response["self_id"]
+                    print("[NapCat]Bot QQ:", bot_qq)
+                    await hot_reload("handlers")
+
                 if "status" in response and "echo" in response:
                     global echo_dict
                     echo_dict[response["echo"]] = response
@@ -464,47 +473,31 @@ async def serve():
                 retry = 0
             except Exception as e:
                 traceback.print_exc()
-                print("[Lagrange Core]Failed to process message: ", str(e))
+                print("[NapCat]Failed to process message: ", str(e))
                 await asyncio.sleep(5)
                 retry += 1
                 if retry > 5:
-                    raise RuntimeError("[Lagrange Core]ERROR, reconnecting")
+                    raise RuntimeError("[NapCat]ERROR, reconnecting")
                 continue
-        
-    async with websockets.connect(websocket_url) as ws:
-        # Get bot info (to get bot QQ)
-        msg = {
-            "type": "ping"
-        }
-        await ws.send(json.dumps(msg))
-        response = await ws.recv()
-        bot_info = json.loads(response)
-        if "self_id" in bot_info:
-            global bot_qq
-            bot_qq = bot_info["self_id"]
-            print("[Lagrange Core]Bot QQ:", bot_qq)
-            print("[Lagrange Core]Connected to server")
 
-        else:
-            print("[Lagrange Core]Failed to connect to server")
-            return
-        
-        await hot_reload("handlers")
-        await serve_forever(ws)
+    print(f"[NapCat]Starting reverse websocket server: {websocket_url}/onebot/v11/ws")
+    await hot_reload("handlers")
+    async with websockets.serve(serve_forever, Host, int(Port)):
+        await asyncio.Future()
        
 bot_workpath = os.path.join(os.path.dirname(__file__), "bot_workpath")
 
 async def server():
-    print("[Lagrange Core]Starting server")
+    print("[NapCat]Starting server")
     #await hot_reload("handlers")
     while not server_close_signal:
         try:
             await serve()
         except Exception as e:
-            print("[Lagrange Core]", traceback.format_exc())
-            print("[Lagrange Core]Error:", e)
+            print("[NapCat]", traceback.format_exc())
+            print("[NapCat]Error:", e)
             await asyncio.sleep(5)
-            print("[Lagrange Core]Reconnecting...")
+            print("[NapCat]Reconnecting...")
             
 if __name__ == "__main__":
     asyncio.run(server())

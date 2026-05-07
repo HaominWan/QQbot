@@ -7,9 +7,22 @@ __pycache__/
 myenv/
 venv/
 env/
+.venv/
+.venv*/
 
 # Bot Configuration
 config.json
+
+# Custom persona prompts (personal, not for sharing)
+roles/murasame_card.py
+roles/Murasame_*.py
+
+# Sticker images (bring your own; only manifest.json is tracked)
+stickers/*.jpg
+stickers/*.jpeg
+stickers/*.gif
+stickers/*.png
+stickers/*.webp
 
 # Temporary files
 tmp/

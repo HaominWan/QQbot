@@ -1,9 +1,16 @@
 {
   "api_keys": {
-    "openai": "YOUR_OPENAI_API_KEY",
+    "deepseek": "YOUR_DEEPSEEK_API_KEY",
+    "openrouter": "YOUR_OPENROUTER_API_KEY",
     "gemini": "YOUR_GEMINI_API_KEY",
     "groq": "YOUR_GROQ_API_KEY",
+    "openai": "YOUR_OPENAI_API_KEY",
     "prodia": "YOUR_PRODIA_API_KEY"
+  },
+  "model_settings": {
+    "deepseek_base_url": "https://api.deepseek.com",
+    "deepseek_model": "deepseek-v4-flash",
+    "deepseek_temperature": 0.75
   },
   "bot_settings": {
     "super_users": [123456789],

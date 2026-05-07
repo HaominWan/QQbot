@@ -12,7 +12,8 @@ import os
 from config import *
 from api import *
 from aiohttp import ClientTimeout
-from bot import proxy_url
+
+proxy_url = PROXY_URL
 
 async def save_image_and_convert_to_base64(raw_message):
     try:

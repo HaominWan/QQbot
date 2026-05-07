@@ -43,6 +43,6 @@ class User:
         else: # If no system message exists, add one
             tmp_chat_history.insert(0, {"role": "system", "content": system_role})
 
-        gpt_response = await call_groq_api(tmp_chat_history)
+        gpt_response = await call_llm_api(tmp_chat_history)
         self.add_message("assistant", gpt_response)
         return gpt_response

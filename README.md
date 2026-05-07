@@ -1,123 +1,194 @@
-# QQBot (Based on Lagrange.OneBot)
+# QQBot
 
-这是一个基于 [Lagrange.OneBot](https://github.com/LagrangeDev/Lagrange.Core) 和 Python 的 QQ 机器人项目。它集成了多种 AI 模型（OpenAI, Gemini, Groq）以及丰富的实用工具插件。
+基于 [NapCatQQ](https://github.com/NapNeko/NapCatQQ) + Python 的 QQ 机器人，以 DeepSeek 为主对话模型，内置丛雨角色扮演人格，支持图片识别、Markdown/公式渲染、表情包系统等多模态能力。
 
-## ✨ 功能特性
+## 功能一览
 
-### 🤖 AI 对话与交互
-- **多模型支持**: 集成 OpenAI, Google Gemini, Groq 等多种 LLM API。
-- **多模态能力**: 支持图片识别与理解（基于 Gemini）。
-- **角色扮演**: 支持自定义 System Prompt，内置多种角色（如 Murasame）。
-- **上下文记忆**: 支持私聊和群聊的上下文对话。
+| 能力 | 说明 |
+|------|------|
+| 角色扮演 | 内置丛雨人格（主人/守护模式），傲娇恋人风格，支持表情包辅助情绪表达 |
+| 图片识别 | 消息含图片时自动调用 Gemini 2.0 Flash（via OpenRouter）识别并告知 AI |
+| Markdown 渲染 | AI 回复中的代码块、表格、数学公式自动渲染为图片发送 |
+| 数学公式 | KaTeX 渲染，支持 `$…$` 行内和 `$$…$$` 块级公式 |
+| AI 绘图 | 调用 Prodia API 生成图片 |
+| Typst 渲染 | 将 Typst 代码渲染为图片 |
+| 游戏王查卡 | 查询游戏王卡片信息与图片 |
+| P5 预告信 | 生成女神异闻录 5 风格预告信 |
+| JMComic | 漫画下载并转 PDF |
+| 语音转文字 | 调用 Groq Whisper 转录语音消息 |
+| 会话重置 | 清空当前上下文记忆 |
 
-### 🛠️ 实用工具插件
-- **AI 绘图**: 使用 Prodia API 生成高质量图片 (`.draw`)。
-- **代码渲染**:
-  - **Typst**: 将 Typst 代码渲染为图片 (`.typ` / `.typst`)。
-  - **Markdown**: 将 Markdown 文本渲染为图片 (`.md` / `.markdown`)。
-- **娱乐功能**:
-  - **游戏王查卡**: 查询游戏王卡片信息 (`.YGO`)。
-  - **P5 预告信**: 生成女神异闻录 5 风格的预告信 (`.P5`)。
-  - **JMComic**: 漫画下载与 PDF 生成 (`.jm`)。
+## 部署
 
-### ⚙️ 管理功能
-- **重置对话**: 清除当前会话的上下文记忆 (`.reset`)。
-- **热重载**: 支持插件和处理器的热重载。
+### 前置要求
 
-## 🚀 快速开始
+- **Python 3.11+**（建议用 venv）
+- **Node.js 18+**（Markdown/公式渲染依赖 Puppeteer）
+- **NapCatQQ**（任意版本，OneBot v11 反向 WebSocket 模式）
 
-### 环境要求
-- Windows / Linux / macOS
-- Python 3.8+
-- [Lagrange.OneBot](https://github.com/LagrangeDev/Lagrange.Core) (已包含在项目中或自行下载)
-
-### 1. 安装依赖
+### 1. 克隆并安装依赖
 
 ```bash
+git clone <repo-url>
+cd QQBot
+
+# Python 依赖
+python -m venv Bot/.venv
+Bot/.venv/Scripts/activate       # Windows
+# source Bot/.venv/bin/activate  # Linux/macOS
 pip install -r Bot/requirements.txt
+
+# Node 依赖（Markdown 渲染）
+npm install
 ```
 
 ### 2. 配置文件
 
-#### 主配置
-复制 `Bot/config.example.json` 为 `Bot/config.json`，并填入你的 API Key 和配置信息：
+复制 `Bot/config.example.json` 为 `Bot/config.json` 并填写：
 
 ```json
 {
   "api_keys": {
-    "openai": "sk-...",
-    "gemini": "AIza...",
-    "groq": "gsk_...",
-    "prodia": "..."
+    "deepseek":   "sk-...",
+    "openrouter": "sk-or-v1-...",
+    "gemini":     "AIza...",
+    "groq":       "gsk_...",
+    "openai":     "",
+    "prodia":     ""
+  },
+  "model_settings": {
+    "deepseek_base_url":    "https://api.deepseek.com",
+    "deepseek_model":       "deepseek-v4-flash",
+    "deepseek_temperature": 0.75
   },
   "bot_settings": {
-    "super_users": [123456789],     // 管理员 QQ 号
-    "test_groups": [123456789],     // 启用的群组 QQ 号
-    "host": "127.0.0.1",
-    "port": "8080",
-    "proxy_url": "http://127.0.0.1:7890" // 代理地址（可选）
+    "super_users": [你的QQ号],
+    "test_groups":  [启用Bot的群号],
+    "host":      "127.0.0.1",
+    "port":      "8080",
+    "proxy_url": "http://127.0.0.1:7890"
   }
 }
 ```
 
-#### 插件配置
-如果需要使用 JMComic 功能，请检查 `Bot/plugins/option.yml` 配置文件。
+**字段说明：**
 
-### 3. 启动
+| 字段 | 用途 | 是否必填 |
+|------|------|----------|
+| `deepseek` | 主对话模型 | 必填 |
+| `openrouter` | 图片识别（Gemini 2.0 Flash） | 推荐填写 |
+| `gemini` | 视频分析（旧接口） | 可选 |
+| `groq` | 语音转文字（Whisper） | 可选 |
+| `prodia` | AI 绘图 | 可选 |
+| `super_users` | 主人 QQ 号列表（启用恋人模式） | 必填 |
+| `test_groups` | 允许 Bot 响应的群号列表 | 必填 |
+| `proxy_url` | HTTP 代理（访问 OpenRouter / DeepSeek） | 按需填写 |
 
-#### Windows 用户
-直接运行项目根目录下的 `run.bat` 脚本。该脚本会自动：
-1. 关闭旧的 Lagrange 进程。
-2. 启动 `Lagrange.OneBot.exe`。
-3. 启动 Python Bot。
+### 3. 配置 NapCatQQ
 
-#### 手动启动
-1. 启动 Lagrange.OneBot 并扫码登录。
-2. 运行 Python Bot:
-   ```bash
-   python Bot/bot.py
-   ```
+1. 启动 NapCatQQ 并登录 QQ 账号
+2. 进入「网络配置」，添加一个 **反向 WebSocket** 连接：
+   - URL：`ws://127.0.0.1:8080/onebot/v11/ws`
+3. 保存并启用
 
-## 📝 指令列表
+### 4. 启动 Bot
 
-| 指令 | 说明 | 示例 |
-| --- | --- | --- |
-| `.help` | 显示帮助信息 | `.help` |
-| `.reset` | 重置当前对话上下文 | `.reset` |
-| `.draw <提示词>` | AI 绘图 | `.draw beautiful girl, white hair` |
-| `.typ <代码>` | 渲染 Typst 代码 | `.typ $ x^2 + y^2 = 1 $` |
-| `.md <文本>` | 渲染 Markdown 文本 | `.md # Hello World` |
-| `.YGO <卡名>` | 查询游戏王卡片 | `.YGO 增殖的G` |
-| `.P5 <内容>` | 生成 P5 预告信 | `.P5 偷走你的心` |
-| `.jm <代码>` | 下载 JM 漫画并转 PDF | `.jm 123456` |
+**Windows（推荐）：**
 
-## 📂 项目结构
+```bat
+run.bat
+```
+
+脚本会自动检测 venv 并等待 8080 端口就绪。
+
+**手动启动：**
+
+```bash
+cd Bot
+python bot.py
+```
+
+日志出现 `[NapCat] NapCat connected from path` 表示连接成功。
+
+### 5. 表情包（可选）
+
+在 `Bot/stickers/` 目录下放置图片并更新 `Bot/stickers/manifest.json`：
 
 ```
-QQbot/
+stickers/
+  shy0.jpg
+  shy1.gif        # 同一情绪可放多张，发送时随机选择
+  smug0.jpg
+  manifest.json
+```
+
+`manifest.json` 格式：
+
+```json
+{
+  "shy":  "害羞、被夸奖、被摸头、慌乱时",
+  "smug": "完成任务后的得意、自满时"
+}
+```
+
+## 指令列表
+
+群聊需要 @ Bot，私聊直接发送。
+
+| 指令 | 说明 |
+|------|------|
+| `.help` | 显示帮助 |
+| `.reset` | 清空当前会话上下文 |
+| `.draw <提示词>` | AI 绘图（Prodia） |
+| `.typ <代码>` | 渲染 Typst 代码为图片 |
+| `.md <文本>` | 渲染 Markdown 为图片 |
+| `.YGO <卡名>` | 游戏王查卡 |
+| `.P5 <内容>` | P5 风格预告信 |
+| `.jm <编号>` | 下载 JMComic 并转 PDF |
+
+## 项目结构
+
+```
+QQBot/
 ├── Bot/
-│   ├── bot.py              # 主程序入口
-│   ├── config.py           # 配置加载
-│   ├── handlers.py         # 消息分发处理
-│   ├── command_handlers.py # 命令处理逻辑
-│   ├── api.py              # LLM API 封装
-│   ├── models/             # 数据模型 (User, Group)
-│   └── plugins/            # 功能插件
-│       ├── drawing.py      # 绘图插件
-│       ├── gemini.py       # Gemini 多模态插件
-│       ├── typst_renderer.py # Typst 渲染
-│       └── ...
-├── appsettings.json        # Lagrange 配置文件
-├── run.bat                 # Windows 启动脚本
-└── requirements.txt        # Python 依赖
+│   ├── bot.py                  # WebSocket 服务器 & 消息收发
+│   ├── handlers.py             # 消息路由 & 多模态预处理
+│   ├── agent_orchestrator.py   # Agent 编排（决策/对话/工具调用）
+│   ├── persona_engine.py       # 人格系统（主人/守护模式判断）
+│   ├── session_manager.py      # 会话管理（私聊/群聊上下文）
+│   ├── api.py                  # DeepSeek API 封装（含重试）
+│   ├── config.py               # 配置加载
+│   ├── command_handlers.py     # 命令解析与分发
+│   ├── config.example.json     # 配置模板（复制为 config.json 后填写）
+│   ├── requirements.txt        # Python 依赖
+│   ├── models/
+│   │   ├── User.py             # 私聊会话模型
+│   │   └── Group.py            # 群聊会话模型
+│   ├── roles/
+│   │   └── murasame_card.py    # 丛雨角色卡（人格提示词）
+│   ├── plugins/
+│   │   ├── vision.py           # 图片识别（OpenRouter → Gemini 2.0 Flash）
+│   │   ├── markdown.py         # Markdown 渲染（Python 侧调度）
+│   │   ├── renderMarkdown.js   # Markdown 渲染（Node.js + Puppeteer + KaTeX）
+│   │   ├── stickers.py         # 表情包加载与随机选取
+│   │   ├── drawing.py          # AI 绘图（Prodia）
+│   │   ├── gemini.py           # 视频/音频分析
+│   │   └── ...
+│   └── stickers/
+│       ├── manifest.json       # 表情包情绪描述（需自行准备）
+│       └── *.jpg / *.gif       # 表情包图片（不随仓库分发）
+├── package.json                # Node.js 依赖
+├── run.bat                     # Windows 一键启动
+└── run.ps1                     # PowerShell 启动脚本
 ```
 
-## ⚠️ 免责声明
+## 注意事项
 
-1. 本项目仅供学习和研究使用，请勿用于非法用途。
-2. JMComic 插件涉及第三方内容，请遵守相关法律法规。
-3. 请妥善保管你的 `config.json`，其中包含敏感的 API Key。
+- `Bot/config.json` 含有 API Key，已加入 `.gitignore`，不会提交到 Git
+- 中国大陆访问 OpenRouter 建议配置代理
+- Puppeteer 首次运行会自动下载 Chromium，需要网络连接
+- 表情包图片不包含在仓库中，需自行准备后放入 `Bot/stickers/`
 
-## 📄 License
+## License
 
 MIT

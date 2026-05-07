@@ -1,15 +1,13 @@
-"""
-命令处理器模块 - 使用枚举和字典映射重构命令处理逻辑
-"""
 import os
+import shutil
 from enum import Enum
-from typing import Callable, Dict, Optional, Tuple, Any
-from models import Group, User
-from plugins import *
+from typing import Optional
+
+from plugins import P5_card, YGO_find_card, drawing, jm2pdf, markdown, typst_renderer
+from tool_router import Tool, ToolRouter, ToolScope
 
 
 class CommandType(Enum):
-    """命令类型枚举"""
     HELP = "help"
     RESET = "reset"
     DRAW = "draw"
@@ -21,333 +19,279 @@ class CommandType(Enum):
 
 
 class MessageType(Enum):
-    """消息类型枚举"""
     GROUP = "group"
     PRIVATE = "private"
 
 
 class CommandHandler:
-    """命令处理器类"""
-    
-    def __init__(self, bot_interfaces, user_sessions):
+    """Command facade backed by ToolRouter."""
+
+    def __init__(self, bot_interfaces, user_sessions, session_manager=None):
         self.bot_interfaces = bot_interfaces
-        self.user_sessions = user_sessions  # 存储对 user_sessions 的引用
-        self.help_message = '''========================
+        self.user_sessions = user_sessions
+        self.session_manager = session_manager
+        self.tool_router = ToolRouter()
+        self.help_message = """========================
 .help           插件信息
 .reset          重置对话
-.draw           AI绘图
-.typ/.typst     Typst渲染
-.md/.markdown   Markdown渲染
-.YGO            查询卡片信息
-.P5             预告信
-========================'''
-        
-        # 命令前缀映射到命令类型
-        self.command_prefixes = {
-            ".help": CommandType.HELP,
-            ".reset": CommandType.RESET,
-            ".draw": CommandType.DRAW,
-            ".typ": CommandType.TYPST,
-            ".typst": CommandType.TYPST,
-            ".md": CommandType.MARKDOWN,
-            ".markdown": CommandType.MARKDOWN,
-            ".YGO": CommandType.YGO,
-            ".P5": CommandType.P5,
-            ".p5": CommandType.P5,
-            ".jm": CommandType.JM,
-            ".JM": CommandType.JM,
-        }
-        
-        # 群组命令处理器映射
-        self.group_handlers: Dict[CommandType, Callable] = {
-            CommandType.HELP: self._handle_help_group,
-            CommandType.RESET: self._handle_reset_group,
-            CommandType.DRAW: self._handle_draw_group,
-            CommandType.TYPST: self._handle_typst_group,
-            CommandType.MARKDOWN: self._handle_markdown_group,
-            CommandType.YGO: self._handle_ygo_group,
-            CommandType.P5: self._handle_p5_group,
-            CommandType.JM: self._handle_jm_group,
-        }
-        
-        # 私聊命令处理器映射
-        self.private_handlers: Dict[CommandType, Callable] = {
-            CommandType.HELP: self._handle_help_private,
-            CommandType.RESET: self._handle_reset_private,
-            CommandType.DRAW: self._handle_draw_private,
-            CommandType.TYPST: self._handle_typst_private,
-            CommandType.MARKDOWN: self._handle_markdown_private,
-            CommandType.YGO: self._handle_ygo_private,
-            CommandType.P5: self._handle_p5_private,
-            CommandType.JM: self._handle_jm_private,
-        }
+.draw           AI 绘图
+.typ/.typst     Typst 渲染
+.md/.markdown   Markdown 渲染
+.YGO            查询游戏王卡片
+.P5             生成 P5 预告信
+.jm             下载 JM 并生成 PDF
+========================"""
+        self._register_tools()
 
-    def get_command_type(self, message_content: str) -> Optional[CommandType]:
-        """根据消息内容获取命令类型"""
-        for prefix, command_type in self.command_prefixes.items():
-            if message_content.startswith(prefix):
-                return command_type
-        return None
-
-    def extract_command_content(self, message_content: str, command_type: CommandType) -> str:
-        """提取命令参数内容"""
-        for prefix, cmd_type in self.command_prefixes.items():
-            if cmd_type == command_type and message_content.startswith(prefix):
-                return message_content[len(prefix):].strip()
-        return ""
-
-    async def handle_command(self, ws, message_type: MessageType, command_type: CommandType, 
-                           message_content: str, **kwargs) -> bool:
-        """处理命令"""
-        try:
-            if message_type == MessageType.GROUP:
-                handler = self.group_handlers.get(command_type)
-                if handler:
-                    await handler(ws, message_content, **kwargs)
-                    return True
-            elif message_type == MessageType.PRIVATE:
-                handler = self.private_handlers.get(command_type)
-                if handler:
-                    await handler(ws, message_content, **kwargs)
-                    return True
-        except Exception as e:
-            print(f"命令处理错误: {e}")
-            return False
-        return False
-
-    # 群组命令处理器
-    async def _handle_help_group(self, ws, message_content: str, group_id: int, **kwargs):
-        await self.bot_interfaces["send_group_message"](
-            ws, group_id, 
-            await self.bot_interfaces["decode_CQ_to_message"](self.help_message)
+    def _register_tools(self):
+        self.tool_router.register_many(
+            [
+                Tool(
+                    name="help",
+                    command_type=CommandType.HELP,
+                    prefixes=[".help"],
+                    group_handler=self._handle_help_group,
+                    private_handler=self._handle_help_private,
+                    description="显示插件信息",
+                ),
+                Tool(
+                    name="reset",
+                    command_type=CommandType.RESET,
+                    prefixes=[".reset"],
+                    group_handler=self._handle_reset_group,
+                    private_handler=self._handle_reset_private,
+                    description="重置当前会话",
+                ),
+                Tool(
+                    name="draw",
+                    command_type=CommandType.DRAW,
+                    prefixes=[".draw"],
+                    group_handler=self._handle_draw_group,
+                    private_handler=self._handle_draw_private,
+                    description="AI 绘图",
+                ),
+                Tool(
+                    name="typst",
+                    command_type=CommandType.TYPST,
+                    prefixes=[".typst", ".typ"],
+                    group_handler=self._handle_typst_group,
+                    private_handler=self._handle_typst_private,
+                    description="Typst 渲染",
+                ),
+                Tool(
+                    name="markdown",
+                    command_type=CommandType.MARKDOWN,
+                    prefixes=[".markdown", ".md"],
+                    group_handler=self._handle_markdown_group,
+                    private_handler=self._handle_markdown_private,
+                    description="Markdown 渲染",
+                ),
+                Tool(
+                    name="ygo",
+                    command_type=CommandType.YGO,
+                    prefixes=[".YGO"],
+                    group_handler=self._handle_ygo_group,
+                    private_handler=self._handle_ygo_private,
+                    description="查询游戏王卡片",
+                ),
+                Tool(
+                    name="p5",
+                    command_type=CommandType.P5,
+                    prefixes=[".P5", ".p5"],
+                    group_handler=self._handle_p5_group,
+                    private_handler=self._handle_p5_private,
+                    description="生成 P5 预告信",
+                ),
+                Tool(
+                    name="jm",
+                    command_type=CommandType.JM,
+                    prefixes=[".jm", ".JM"],
+                    group_handler=self._handle_jm_group,
+                    private_handler=self._handle_jm_private,
+                    description="下载 JM 并生成 PDF",
+                ),
+            ]
         )
 
-    async def _handle_reset_group(self, ws, message_content: str, group_id: int, user_id: int, **kwargs):
-        group = Group(group_id, self.bot_interfaces["bot_qq"])
-        if self.bot_interfaces["test_if_super_user"](user_id):
-            try:
-                group.chat_history = []
-                reset_message = "重置成功"
-                await self.bot_interfaces["send_group_message"](
-                    ws, group_id, 
-                    await self.bot_interfaces["decode_CQ_to_message"](reset_message)
-                )
-            except:
-                reset_message = "重置失败"
-                await self.bot_interfaces["send_group_message"](
-                    ws, group_id, 
-                    await self.bot_interfaces["decode_CQ_to_message"](reset_message)
-                )
-        else:
-            reset_message = "抱歉，您没有权限重置对话"
-            await self.bot_interfaces["send_group_message"](
-                ws, group_id, 
-                await self.bot_interfaces["decode_CQ_to_message"](reset_message)
+    def get_command_type(self, message_content: str) -> Optional[CommandType]:
+        return self.tool_router.match_command_type(message_content)
+
+    def extract_command_content(self, message_content: str, command_type: CommandType) -> str:
+        return self.tool_router.extract_content(message_content, command_type)
+
+    async def handle_command(
+        self,
+        ws,
+        message_type: MessageType,
+        command_type: CommandType,
+        message_content: str,
+        **kwargs,
+    ) -> bool:
+        try:
+            scope = ToolScope(message_type.value)
+            return await self.tool_router.handle(
+                scope,
+                command_type,
+                ws,
+                message_content,
+                **kwargs,
             )
+        except Exception as exc:
+            print(f"[Command] Failed to handle {command_type}: {exc}")
+            return False
+
+    async def _send_group_text(self, ws, group_id: int, text: str):
+        await self.bot_interfaces["send_group_message"](
+            ws,
+            group_id,
+            await self.bot_interfaces["decode_CQ_to_message"](text),
+        )
+
+    async def _send_private_text(self, ws, user_id: int, text: str):
+        await self.bot_interfaces["send_private_message"](
+            ws,
+            user_id,
+            await self.bot_interfaces["decode_CQ_to_message"](text),
+        )
+
+    async def _handle_help_group(self, ws, message_content: str, group_id: int, **kwargs):
+        await self._send_group_text(ws, group_id, self.help_message)
+
+    async def _handle_help_private(self, ws, message_content: str, user_id: int, **kwargs):
+        await self._send_private_text(ws, user_id, self.help_message)
+
+    async def _handle_reset_group(
+        self,
+        ws,
+        message_content: str,
+        group_id: int,
+        user_id: int,
+        **kwargs,
+    ):
+        if not self.bot_interfaces["test_if_super_user"](user_id):
+            await self._send_group_text(ws, group_id, "抱歉，您没有权限重置对话")
+            return
+
+        if self.session_manager:
+            self.session_manager.reset_group_session(group_id)
+        await self._send_group_text(ws, group_id, "重置成功")
+
+    async def _handle_reset_private(self, ws, message_content: str, user_id: int, **kwargs):
+        reset_ok = False
+        if self.session_manager:
+            reset_ok = self.session_manager.reset_private_session(user_id)
+        else:
+            session = self.user_sessions.get(user_id)
+            if session:
+                session.chat_history = []
+                reset_ok = True
+
+        if reset_ok:
+            await self._send_private_text(ws, user_id, "重置成功")
+        else:
+            await self._send_private_text(ws, user_id, "还没有开始对话，无需重置")
 
     async def _handle_draw_group(self, ws, message_content: str, group_id: int, **kwargs):
         image_cq_code = await drawing.handle_drawing_message(message_content)
-        if image_cq_code is None:
-            image_cq_code = "抱歉，目前无法为您提供绘图服务，请尝试使用其他指令。"
-        try:
-            await self.bot_interfaces["send_group_message"](
-                ws, group_id, 
-                await self.bot_interfaces["decode_CQ_to_message"](image_cq_code)
-            )
-        except:
-            await self.bot_interfaces["send_group_message"](
-                ws, group_id, 
-                await self.bot_interfaces["decode_CQ_to_message"](
-                    "抱歉，目前无法为您提供绘图服务，请尝试使用其他指令。"
-                )
-            )
+        await self._send_group_text(ws, group_id, image_cq_code or "绘图服务暂时不可用")
+
+    async def _handle_draw_private(self, ws, message_content: str, user_id: int, **kwargs):
+        image_cq_code = await drawing.handle_drawing_message(message_content)
+        await self._send_private_text(ws, user_id, image_cq_code or "绘图服务暂时不可用")
 
     async def _handle_typst_group(self, ws, message_content: str, group_id: int, **kwargs):
         image_cq_code = await typst_renderer.handle_typst_message(message_content)
-        try:
-            await self.bot_interfaces["send_group_message"](
-                ws, group_id, 
-                await self.bot_interfaces["decode_CQ_to_message"](image_cq_code)
-            )
-        except:
-            await self.bot_interfaces["send_group_message"](
-                ws, group_id, 
-                await self.bot_interfaces["decode_CQ_to_message"](
-                    "抱歉，目前无法为您提供Typst渲染服务，请尝试使用其他指令。"
-                )
-            )
+        await self._send_group_text(ws, group_id, image_cq_code)
+
+    async def _handle_typst_private(self, ws, message_content: str, user_id: int, **kwargs):
+        image_cq_code = await typst_renderer.handle_typst_message(message_content)
+        await self._send_private_text(ws, user_id, image_cq_code)
 
     async def _handle_markdown_group(self, ws, message_content: str, group_id: int, **kwargs):
         image_cq_code = await markdown.handle_markdown_message(message_content)
-        try:
-            await self.bot_interfaces["send_group_message"](
-                ws, group_id, 
-                await self.bot_interfaces["decode_CQ_to_message"](image_cq_code)
-            )
-        except:
-            await self.bot_interfaces["send_group_message"](
-                ws, group_id, 
-                await self.bot_interfaces["decode_CQ_to_message"](
-                    "抱歉，目前无法为您提供Markdown渲染服务，请尝试使用其他指令。"
-                )
-            )
+        await self._send_group_text(ws, group_id, image_cq_code)
+
+    async def _handle_markdown_private(self, ws, message_content: str, user_id: int, **kwargs):
+        image_cq_code = await markdown.handle_markdown_message(message_content)
+        await self._send_private_text(ws, user_id, image_cq_code)
 
     async def _handle_ygo_group(self, ws, message_content: str, group_id: int, **kwargs):
         command_content = self.extract_command_content(message_content, CommandType.YGO)
         card_info = await YGO_find_card.get_card_info(command_content)
-        try:
-            await self.bot_interfaces["send_group_message"](ws, group_id, card_info)
-        except:
-            await self.bot_interfaces["send_group_message"](ws, group_id, "抱歉，未找到相关卡片信息。")
+        await self.bot_interfaces["send_group_message"](
+            ws,
+            group_id,
+            card_info or "抱歉，未找到相关卡片信息。",
+        )
+
+    async def _handle_ygo_private(self, ws, message_content: str, user_id: int, **kwargs):
+        command_content = self.extract_command_content(message_content, CommandType.YGO)
+        card_info = await YGO_find_card.get_card_info(command_content)
+        await self.bot_interfaces["send_private_message"](
+            ws,
+            user_id,
+            card_info or "抱歉，未找到相关卡片信息。",
+        )
 
     async def _handle_p5_group(self, ws, message_content: str, group_id: int, **kwargs):
         command_content = self.extract_command_content(message_content, CommandType.P5)
         card_image = await P5_card.get_card(command_content)
-        try:
-            await self.bot_interfaces["send_group_message"](ws, group_id, card_image)
-        except:
-            await self.bot_interfaces["send_group_message"](ws, group_id, "怪盗团有点繁忙")
+        await self.bot_interfaces["send_group_message"](
+            ws,
+            group_id,
+            card_image or "预告信生成失败",
+        )
+
+    async def _handle_p5_private(self, ws, message_content: str, user_id: int, **kwargs):
+        command_content = self.extract_command_content(message_content, CommandType.P5)
+        card_image = await P5_card.get_card(command_content)
+        await self.bot_interfaces["send_private_message"](
+            ws,
+            user_id,
+            card_image or "预告信生成失败",
+        )
 
     async def _handle_jm_group(self, ws, message_content: str, group_id: int, **kwargs):
         command_content = self.extract_command_content(message_content, CommandType.JM)
         jm_pdf = await jm2pdf.get_pdf(command_content)
         if jm_pdf == 0:
-            await self.bot_interfaces["send_group_message"](ws, group_id, "抱歉，未找到相关本子信息。")
-        else:
-            try:
-                await self.bot_interfaces["upload_group_file"](
-                    group_id, jm_pdf, {command_content + ".pdf"}, "jm"
-                )
-                await self.bot_interfaces["send_group_message"](ws, group_id, "少🦌点哟。")
-            except:
-                await self.bot_interfaces["send_group_message"](
-                    ws, group_id, "抱歉，查询功能暂时无法提供服务，请尝试使用其他指令。"
-                )
-            finally:
-                os.remove(jm_pdf)
-                os.rmdir(f"Bot/tmp/{command_content}")
+            await self._send_group_text(ws, group_id, "抱歉，未找到相关本子信息。")
+            return
 
-    # 私聊命令处理器
-    async def _handle_help_private(self, ws, message_content: str, user_id: int, **kwargs):
-        # 检查是否为超级用户
-        if self.bot_interfaces["test_if_super_user"](user_id):
-            # 超级用户收到管理员回复
-            from roles import get_Murasame_goshujin_role
-            admin_response = "主人，有何吩咐？本座已准备好为您服务。"
-            await self.bot_interfaces["send_private_message"](
-                ws, user_id, 
-                await self.bot_interfaces["decode_CQ_to_message"](admin_response)
-            )
-        else:
-            # 普通用户收到角色扮演回复
-            from roles import get_Murasame_customs_role
-            role_response = "汝需要何种帮助？（缓缓睁开双眼，目光平静地注视着对方）说吧，本座姑且听之。吾乃丛雨丸之魂，守护此地五百余年，若有疑问或求助之事，本座愿聆听并给予指引。希望能帮到汝。（说完便再次闭上眼睛，仿佛陷入沉思）"
-            await self.bot_interfaces["send_private_message"](
-                ws, user_id, 
-                await self.bot_interfaces["decode_CQ_to_message"](role_response)
-            )
-
-    async def _handle_reset_private(self, ws, message_content: str, user_id: int, **kwargs):
-        # 直接从 self.user_sessions 中获取会话
-        user_session = self.user_sessions.get(user_id)
-        if user_session:
-            try:
-                user_session.chat_history = []
-                reset_message = "重置成功"
-                await self.bot_interfaces["send_private_message"](
-                    ws, user_id, 
-                    await self.bot_interfaces["decode_CQ_to_message"](reset_message)
-                )
-            except Exception as e:
-                print(f"Error resetting private session for {user_id}: {e}")
-                reset_message = "重置失败"
-                await self.bot_interfaces["send_private_message"](
-                    ws, user_id, 
-                    await self.bot_interfaces["decode_CQ_to_message"](reset_message)
-                )
-        else:
-            # 如果会话不存在，可以选择发送一条消息提示用户
-            await self.bot_interfaces["send_private_message"](
-                ws, user_id, 
-                await self.bot_interfaces["decode_CQ_to_message"]("您还没有开始对话，无需重置。")
-            )
-
-    async def _handle_draw_private(self, ws, message_content: str, user_id: int, **kwargs):
-        image_cq_code = await drawing.handle_drawing_message(message_content)
         try:
-            await self.bot_interfaces["send_private_message"](
-                ws, user_id, 
-                await self.bot_interfaces["decode_CQ_to_message"](image_cq_code)
+            await self.bot_interfaces["upload_group_file"](
+                ws,
+                group_id,
+                jm_pdf,
+                f"{command_content}.pdf",
+                "jm",
             )
-        except:
-            await self.bot_interfaces["send_private_message"](
-                ws, user_id, 
-                await self.bot_interfaces["decode_CQ_to_message"](
-                    "抱歉，目前无法为您提供绘图服务，请尝试使用其他指令。"
-                )
-            )
-
-    async def _handle_typst_private(self, ws, message_content: str, user_id: int, **kwargs):
-        image_cq_code = await typst_renderer.handle_typst_message(message_content)
-        try:
-            await self.bot_interfaces["send_private_message"](
-                ws, user_id, 
-                await self.bot_interfaces["decode_CQ_to_message"](image_cq_code)
-            )
-        except:
-            await self.bot_interfaces["send_private_message"](
-                ws, user_id, 
-                await self.bot_interfaces["decode_CQ_to_message"](
-                    "抱歉，目前无法为您提供Typst渲染服务，请尝试使用其他指令。"
-                )
-            )
-
-    async def _handle_markdown_private(self, ws, message_content: str, user_id: int, **kwargs):
-        image_cq_code = await markdown.handle_markdown_message(message_content)
-        try:
-            await self.bot_interfaces["send_private_message"](
-                ws, user_id, 
-                await self.bot_interfaces["decode_CQ_to_message"](image_cq_code)
-            )
-        except:
-            await self.bot_interfaces["send_private_message"](
-                ws, user_id, 
-                await self.bot_interfaces["decode_CQ_to_message"](
-                    "抱歉，目前无法为您提供Markdown渲染服务，请尝试使用其他指令。"
-                )
-            )
-
-    async def _handle_ygo_private(self, ws, message_content: str, user_id: int, **kwargs):
-        command_content = self.extract_command_content(message_content, CommandType.YGO)
-        card_info = await YGO_find_card.get_card_info(command_content)
-        try:
-            await self.bot_interfaces["send_private_message"](ws, user_id, card_info)
-        except:
-            await self.bot_interfaces["send_private_message"](ws, user_id, "抱歉，未找到相关卡片信息。")
-
-    async def _handle_p5_private(self, ws, message_content: str, user_id: int, **kwargs):
-        command_content = self.extract_command_content(message_content, CommandType.P5)
-        card_image = await P5_card.get_card(command_content)
-        try:
-            await self.bot_interfaces["send_private_message"](ws, user_id, card_image)
-        except:
-            await self.bot_interfaces["send_private_message"](ws, user_id, "怪盗团有点繁忙")
+            await self._send_group_text(ws, group_id, "发送完成")
+        finally:
+            self._cleanup_jm_tmp(jm_pdf, command_content)
 
     async def _handle_jm_private(self, ws, message_content: str, user_id: int, **kwargs):
         command_content = self.extract_command_content(message_content, CommandType.JM)
         jm_pdf = await jm2pdf.get_pdf(command_content)
         if jm_pdf == 0:
-            await self.bot_interfaces["send_private_message"](ws, user_id, "抱歉，未找到相关本子信息。")
-        else:
-            try:
-                await self.bot_interfaces["upload_private_file"](
-                    user_id, jm_pdf, {command_content + ".pdf"}
-                )
-                await self.bot_interfaces["send_private_message"](ws, user_id, "少🦌点哟。")
-            except:
-                await self.bot_interfaces["send_private_message"](
-                    ws, user_id, "抱歉，查询功能暂时无法提供服务，请尝试使用其他指令。"
-                )
-            finally:
-                os.remove(jm_pdf)
-                os.rmdir(f"Bot/tmp/{command_content}")
+            await self._send_private_text(ws, user_id, "抱歉，未找到相关本子信息。")
+            return
+
+        try:
+            await self.bot_interfaces["upload_private_file"](
+                ws,
+                user_id,
+                jm_pdf,
+                f"{command_content}.pdf",
+            )
+            await self._send_private_text(ws, user_id, "发送完成")
+        finally:
+            self._cleanup_jm_tmp(jm_pdf, command_content)
+
+    def _cleanup_jm_tmp(self, jm_pdf: str, command_content: str):
+        if jm_pdf and os.path.exists(jm_pdf):
+            os.remove(jm_pdf)
+
+        tmp_dir = os.path.join("Bot", "tmp", command_content)
+        if os.path.isdir(tmp_dir):
+            shutil.rmtree(tmp_dir, ignore_errors=True)

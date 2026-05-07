@@ -1,6 +1,5 @@
 openai
 groq
-google
 websockets
 aiohttp
 requests
@@ -10,6 +9,7 @@ markdown
 imgkit
 pymdown-extensions
 google-generativeai
+Pillow
 emoji
 aiofiles
 lxml
