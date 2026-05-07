@@ -48,9 +48,9 @@ class CommandHandler:
 .md / .markdown    Markdown 渲染
 .YGO               查询游戏王卡片
 .P5                生成 P5 预告信
-.jm                下载 JM 并生成 PDF
+.jm                下载 JM 并生成 PDF  🔧
 ========================
-★ 超级用户专属指令"""
+★ 超级用户专属指令  🔧 维修中"""
         self._register_tools()
 
     def _register_tools(self):
@@ -290,6 +290,9 @@ class CommandHandler:
         )
 
     async def _handle_jm_group(self, ws, message_content: str, group_id: int, **kwargs):
+        await self._send_group_text(ws, group_id, ".jm 指令正在维修中，暂时无法使用")
+        return
+
         command_content = self.extract_command_content(message_content, CommandType.JM)
         jm_pdf = await jm2pdf.get_pdf(command_content)
         if jm_pdf == 0:
@@ -309,6 +312,9 @@ class CommandHandler:
             self._cleanup_jm_tmp(jm_pdf, command_content)
 
     async def _handle_jm_private(self, ws, message_content: str, user_id: int, **kwargs):
+        await self._send_private_text(ws, user_id, ".jm 指令正在维修中，暂时无法使用")
+        return
+
         command_content = self.extract_command_content(message_content, CommandType.JM)
         jm_pdf = await jm2pdf.get_pdf(command_content)
         if jm_pdf == 0:
