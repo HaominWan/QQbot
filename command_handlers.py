@@ -17,6 +17,7 @@ _RESTART_SCRIPT = os.path.join(
 class CommandType(Enum):
     HELP = "help"
     RESET = "reset"
+    CLEAN = "clean"
     DRAW = "draw"
     TYPST = "typst"
     MARKDOWN = "markdown"
@@ -41,6 +42,7 @@ class CommandHandler:
         self.help_message = """========================
 .help              查看此帮助
 .reset             重启 Bot            ★
+.clean             清空当前群记忆      ★
 .draw              AI 绘图
 .typ / .typst      Typst 渲染
 .md / .markdown    Markdown 渲染
@@ -68,7 +70,15 @@ class CommandHandler:
                     prefixes=[".reset"],
                     group_handler=self._handle_reset_group,
                     private_handler=self._handle_reset_private,
-                    description="重置当前会话",
+                    description="重启 Bot",
+                ),
+                Tool(
+                    name="clean",
+                    command_type=CommandType.CLEAN,
+                    prefixes=[".clean"],
+                    group_handler=self._handle_clean_group,
+                    private_handler=self._handle_clean_private,
+                    description="清空当前群向量记忆",
                 ),
                 Tool(
                     name="draw",
@@ -195,6 +205,29 @@ class CommandHandler:
             ["cmd.exe", "/c", _RESTART_SCRIPT],
             creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
         )
+
+    async def _handle_clean_group(
+        self,
+        ws,
+        message_content: str,
+        group_id: int,
+        user_id: int,
+        **kwargs,
+    ):
+        if not self.bot_interfaces["test_if_super_user"](user_id):
+            await self._send_group_text(ws, group_id, "权限不足，仅超级用户可清空记忆")
+            return
+        memory = getattr(self.session_manager, "memory", None) if self.session_manager else None
+        if not memory:
+            await self._send_group_text(ws, group_id, "向量记忆未启用")
+            return
+        if memory.clear(group_id):
+            await self._send_group_text(ws, group_id, "已清空本群的向量记忆")
+        else:
+            await self._send_group_text(ws, group_id, "清空失败，记忆模块尚未就绪")
+
+    async def _handle_clean_private(self, ws, message_content: str, user_id: int, **kwargs):
+        await self._send_private_text(ws, user_id, "私聊暂无向量记忆可清理")
 
     async def _handle_draw_group(self, ws, message_content: str, group_id: int, **kwargs):
         image_cq_code = await drawing.handle_drawing_message(message_content)

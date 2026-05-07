@@ -70,6 +70,17 @@ class VectorMemory:
             }],
         )
 
+    def clear(self, group_id: int) -> bool:
+        """Delete all stored messages for a group. Returns False if not ready."""
+        if not self._ready:
+            return False
+        try:
+            self._client.delete_collection(f"group_{group_id}")
+            return True
+        except Exception as exc:
+            print(f"[Memory] Failed to clear group {group_id}: {exc}")
+            return False
+
     def search(self, group_id: int, query: str) -> str:
         """Return relevant historical messages as a formatted string.
 
