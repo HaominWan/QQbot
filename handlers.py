@@ -1,7 +1,7 @@
 from api import transcribe_audio
 from agent_orchestrator import AgentOrchestrator
 from command_handlers import CommandHandler
-from config import TEST_GROUPS
+from config import TEST_GROUPS, MEMORY_ENABLED, MEMORY_DB_PATH, MEMORY_SEARCH_RESULTS, MEMORY_WINDOW_SIZE
 from framework import BotContext, EventRouter, MessageEvent
 from persona_engine import PersonaEngine
 from plugins import analyze_video
@@ -86,9 +86,21 @@ async def handler_init(interfaces):
         bot_interfaces["bot_qq"],
         bot_interfaces["test_if_super_user"],
     )
+
+    memory = None
+    if MEMORY_ENABLED:
+        try:
+            from memory import VectorMemory
+            memory = VectorMemory(persist_dir=MEMORY_DB_PATH, search_results=MEMORY_SEARCH_RESULTS)
+            print(f"[Memory] Vector memory initialized at {MEMORY_DB_PATH}")
+        except Exception as exc:
+            print(f"[Memory] Failed to initialize vector memory: {exc}")
+
     session_manager = SessionManager(
         bot_interfaces["bot_qq"],
         bot_interfaces["test_if_super_user"],
+        memory=memory,
+        window_size=MEMORY_WINDOW_SIZE,
     )
     user_sessions = session_manager.private_sessions
     command_handler = CommandHandler(

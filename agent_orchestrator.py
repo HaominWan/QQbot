@@ -64,6 +64,11 @@ class AgentOrchestrator:
         segments = payload.get("message", [])
         message_content = await self.bot_interfaces["encode_message_to_CQ"](segments)
 
+        # Store every group message so the bot can recall group history later.
+        memory = self.session_manager.memory
+        if memory:
+            memory.store(group_id, user_id, message_content, "user")
+
         decision = self.decide_group(message_content, segments)
         print(f"[Agent] group decision={decision.action.value} reason={decision.reason}")
 
@@ -94,6 +99,7 @@ class AgentOrchestrator:
             user_id,
             persona_prompt.message_content,
             persona_prompt.system_role,
+            store_user=False,
         )
         segments = await self._build_message_segments(response)
         await self.bot_interfaces["send_group_message"](ws, group_id, segments)

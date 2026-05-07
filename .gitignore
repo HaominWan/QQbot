@@ -28,6 +28,9 @@ stickers/*.webp
 tmp/
 *.log
 
+# Vector memory database (local data, not for sharing)
+memory_db/
+
 # VS Code
 .vscode/
 

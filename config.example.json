@@ -18,5 +18,11 @@
     "host": "127.0.0.1",
     "port": "8080",
     "proxy_url": "http://127.0.0.1:7890"
+  },
+  "memory_settings": {
+    "enabled": true,
+    "db_path": "./memory_db",
+    "window_size": 30,
+    "search_results": 6
   }
 }

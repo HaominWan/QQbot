@@ -8,7 +8,7 @@ typst
 markdown
 imgkit
 pymdown-extensions
-google-generativeai
+google-genai
 Pillow
 emoji
 aiofiles
@@ -18,3 +18,5 @@ wikipedia
 tiktoken
 latex
 selenium
+chromadb
+sentence-transformers

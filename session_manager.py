@@ -1,4 +1,4 @@
-from typing import Callable, Dict
+from typing import Callable, Dict, Optional
 
 import roles
 from models import Group, User
@@ -7,11 +7,13 @@ from models import Group, User
 class SessionManager:
     """Owns conversation session lifecycle for private and group chats."""
 
-    def __init__(self, bot_qq: int, is_super_user: Callable[[int], bool]):
+    def __init__(self, bot_qq: int, is_super_user: Callable[[int], bool], memory=None, window_size: int = 30):
         self.bot_qq = bot_qq
         self.is_super_user = is_super_user
         self.private_sessions: Dict[int, User] = {}
         self.group_sessions: Dict[int, Group] = {}
+        self.memory = memory
+        self.window_size = window_size
 
     def get_private_session(self, user_id: int) -> User:
         user_id = int(user_id)
@@ -23,7 +25,7 @@ class SessionManager:
     def get_group_session(self, group_id: int) -> Group:
         group_id = int(group_id)
         if group_id not in self.group_sessions:
-            self.group_sessions[group_id] = Group(group_id, self.bot_qq)
+            self.group_sessions[group_id] = Group(group_id, self.bot_qq, memory=self.memory, window_size=self.window_size)
         return self.group_sessions[group_id]
 
     def reset_private_session(self, user_id: int) -> bool:

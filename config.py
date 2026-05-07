@@ -21,7 +21,7 @@ GROQ_API_KEY = os.environ.get("GROQ_API_KEY") or api_keys.get("groq", "")
 PRODIA_API_KEY = os.environ.get("PRODIA_API_KEY") or api_keys.get("prodia", "")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY") or api_keys.get("openrouter", "")
 
-DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY") or api_keys.get("deepseek", "REDACTED_API_KEY")
+DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY") or api_keys.get("deepseek", "")
 DEEPSEEK_BASE_URL = model_settings.get("deepseek_base_url", "https://api.deepseek.com")
 DEEPSEEK_MODEL = model_settings.get("deepseek_model", "deepseek-v4-flash")
 DEEPSEEK_TEMPERATURE = float(model_settings.get("deepseek_temperature", 0.75))
@@ -31,3 +31,9 @@ TEST_GROUPS = config_data["bot_settings"]["test_groups"]
 HOST = config_data["bot_settings"]["host"]
 PORT = config_data["bot_settings"]["port"]
 PROXY_URL = config_data["bot_settings"]["proxy_url"]
+
+_memory = config_data.get("memory_settings", {})
+MEMORY_ENABLED = _memory.get("enabled", True)
+MEMORY_DB_PATH = _memory.get("db_path", "./memory_db")
+MEMORY_WINDOW_SIZE = int(_memory.get("window_size", 30))
+MEMORY_SEARCH_RESULTS = int(_memory.get("search_results", 6))

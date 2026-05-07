@@ -1,10 +1,17 @@
+import asyncio
 import os
 import shutil
+import subprocess
 from enum import Enum
 from typing import Optional
 
 from plugins import P5_card, YGO_find_card, drawing, jm2pdf, markdown, typst_renderer
 from tool_router import Tool, ToolRouter, ToolScope
+
+_RESTART_SCRIPT = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "restart.ps1",
+)
 
 
 class CommandType(Enum):
@@ -32,15 +39,16 @@ class CommandHandler:
         self.session_manager = session_manager
         self.tool_router = ToolRouter()
         self.help_message = """========================
-.help           插件信息
-.reset          重置对话
-.draw           AI 绘图
-.typ/.typst     Typst 渲染
-.md/.markdown   Markdown 渲染
-.YGO            查询游戏王卡片
-.P5             生成 P5 预告信
-.jm             下载 JM 并生成 PDF
-========================"""
+.help              查看此帮助
+.reset             重启 Bot            ★
+.draw              AI 绘图
+.typ / .typst      Typst 渲染
+.md / .markdown    Markdown 渲染
+.YGO               查询游戏王卡片
+.P5                生成 P5 预告信
+.jm                下载 JM 并生成 PDF
+========================
+★ 超级用户专属指令"""
         self._register_tools()
 
     def _register_tools(self):
@@ -169,27 +177,29 @@ class CommandHandler:
         **kwargs,
     ):
         if not self.bot_interfaces["test_if_super_user"](user_id):
-            await self._send_group_text(ws, group_id, "抱歉，您没有权限重置对话")
+            await self._send_group_text(ws, group_id, "权限不足，仅超级用户可重启 Bot")
             return
-
-        if self.session_manager:
-            self.session_manager.reset_group_session(group_id)
-        await self._send_group_text(ws, group_id, "重置成功")
+        await self._send_group_text(ws, group_id, "Bot 重启中，稍后见~")
+        await self._trigger_restart()
 
     async def _handle_reset_private(self, ws, message_content: str, user_id: int, **kwargs):
-        reset_ok = False
-        if self.session_manager:
-            reset_ok = self.session_manager.reset_private_session(user_id)
-        else:
-            session = self.user_sessions.get(user_id)
-            if session:
-                session.chat_history = []
-                reset_ok = True
+        if not self.bot_interfaces["test_if_super_user"](user_id):
+            await self._send_private_text(ws, user_id, "权限不足，仅超级用户可重启 Bot")
+            return
+        await self._send_private_text(ws, user_id, "Bot 重启中，稍后见~")
+        await self._trigger_restart()
 
-        if reset_ok:
-            await self._send_private_text(ws, user_id, "重置成功")
-        else:
-            await self._send_private_text(ws, user_id, "还没有开始对话，无需重置")
+    async def _trigger_restart(self):
+        await asyncio.sleep(0.8)
+        subprocess.Popen(
+            [
+                "powershell",
+                "-NoProfile",
+                "-ExecutionPolicy", "Bypass",
+                "-File", _RESTART_SCRIPT,
+            ],
+            creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
+        )
 
     async def _handle_draw_group(self, ws, message_content: str, group_id: int, **kwargs):
         image_cq_code = await drawing.handle_drawing_message(message_content)

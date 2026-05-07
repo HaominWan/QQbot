@@ -1,6 +1,7 @@
 import asyncio
 import json
-import websockets 
+import logging
+import websockets
 import base64
 import aiohttp
 import time
@@ -8,6 +9,10 @@ import traceback
 import os
 import importlib
 import requests
+
+# TCP port-probe connections (e.g. from wait_port.ps1) trigger a harmless
+# "opening handshake failed" warning — suppress it so logs stay clean.
+logging.getLogger("websockets.server").setLevel(logging.ERROR)
 
 from plugins import *
 from config import HOST, PORT, PROXY_URL, SUPER_USERS
@@ -35,7 +40,7 @@ def test_if_super_user(user_id):
     print(f"[Debug] Super user check result: {result}")
     return result
 
-async def get_message_by_id(ws:websockets.WebSocketClientProtocol, message_id):
+async def get_message_by_id(ws, message_id):
     global echo_counter
     echo_counter += 1
     self_echo = str(echo_counter)
@@ -57,7 +62,7 @@ async def get_message_by_id(ws:websockets.WebSocketClientProtocol, message_id):
         return response["data"]
     return None
 
-async def get_stranger_info(ws:websockets.WebSocketClientProtocol, user_id):
+async def get_stranger_info(ws, user_id):
     global echo_counter
     echo_counter += 1
     self_echo = str(echo_counter)
@@ -79,7 +84,7 @@ async def get_stranger_info(ws:websockets.WebSocketClientProtocol, user_id):
         return response["data"]
     return None
 
-async def send_group_message(ws:websockets.WebSocketClientProtocol, group_id, message, auto_escape=False):
+async def send_group_message(ws, group_id, message, auto_escape=False):
 # async def send_group_message(ws_url: str, group_id: str, message, auto_escape: bool =False):
     print("[NapCat]Sending message:", message)
     global echo_counter
@@ -138,7 +143,7 @@ async def send_group_message(ws:websockets.WebSocketClientProtocol, group_id, me
             print("[NapCat]No response received or crash signal triggered")
         return None
 
-async def send_private_message(ws:websockets.WebSocketClientProtocol, user_id, message, auto_escape=False):
+async def send_private_message(ws, user_id, message, auto_escape=False):
     print("[NapCat]Sending message:", message)
     global echo_counter
     echo_counter += 1
@@ -192,7 +197,7 @@ async def send_private_message(ws:websockets.WebSocketClientProtocol, user_id, m
             print("[NapCat]No response received or crash signal triggered")
         return None
 
-async def upload_group_file(ws:websockets.WebSocketClientProtocol, group_id, file, name, folder):
+async def upload_group_file(ws, group_id, file, name, folder):
     # url = '/upload_group_file'
 
     # payload = json.dumps({
@@ -236,7 +241,7 @@ async def upload_group_file(ws:websockets.WebSocketClientProtocol, group_id, fil
     return None
 
 
-async def upload_private_file(ws:websockets.WebSocketClientProtocol, user_id, file, name):
+async def upload_private_file(ws, user_id, file, name):
     # url = "/upload_private_file"
 
     # payload = json.dumps({
@@ -279,7 +284,7 @@ async def upload_private_file(ws:websockets.WebSocketClientProtocol, user_id, fi
     return None
 
 
-async def withdraw_group_message(ws:websockets.WebSocketClientProtocol, message_id):
+async def withdraw_group_message(ws, message_id):
     if message_id == None:
         return None
     global echo_counter
