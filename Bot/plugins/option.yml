@@ -9,15 +9,12 @@ client:
   #  html - 表示网页端
   #  api - 表示APP端
   # APP端不限ip兼容性好，网页端限制ip地区但效率高
-  impl: html
+  impl: api
 
   # domain: 域名配置，默认是 []，表示运行时自动获取域名。
   # 可配置特定域名，如下：
   # 程序会先用第一个域名，如果第一个域名重试n次失败，则换下一个域名重试，以此类推。
-  domain:
-    - 18comic.org
-    - 18comic.vip
-    - jm-comic2.cc
+  domain: []
 
   # retry_times: 请求失败重试次数，增加重试次数提高成功率
   retry_times: 10
