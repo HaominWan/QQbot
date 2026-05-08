@@ -1,38 +1,62 @@
+# Sensitive config
+Bot/config.json
+keystore.json
+
+# Local assistant/project data
+.claude/
+
+# Internal dev notes
+IMAGE_PROCESSING_OPTIMIZATION.md
+NAPCAT_MIGRATION.md
+REFACTOR_README.md
+
+# Misc files not for distribution
+*.crx
+
+# Custom persona prompts
+Bot/roles/murasame_card.py
+Bot/roles/Murasame_*.py
+
+# Sticker images; only manifest templates are tracked
+Bot/stickers/*.jpg
+Bot/stickers/*.jpeg
+Bot/stickers/*.gif
+Bot/stickers/*.png
+Bot/stickers/*.webp
+
+# NapCat/runtime artifacts
+NapCat.Shell.Windows.OneKey/
+startup.log
+*.log
+
 # Python
 __pycache__/
 *.py[cod]
-*$py.class
+*.pyo
+*.pyd
+.Python
+Bot/.venv/
+Bot/myenv/
+Bot/tmp/
+Bot/memory_db/
+*.egg-info/
+dist/
+build/
+.eggs/
 
-# Virtual Environment
-myenv/
-venv/
-env/
-.venv/
-.venv*/
+# Node/npm
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# Bot Configuration
-config.json
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
 
-# Custom persona prompts (personal, not for sharing)
-roles/murasame_card.py
-roles/Murasame_*.py
-
-# Sticker images (bring your own; only manifest.json is tracked)
-stickers/*.jpg
-stickers/*.jpeg
-stickers/*.gif
-stickers/*.png
-stickers/*.webp
-
-# Temporary files
-tmp/
-*.log
-
-# Vector memory database (local data, not for sharing)
-memory_db/
-
-# VS Code
+# IDE
 .vscode/
-
-# JetBrains
 .idea/
+*.suo
+*.user

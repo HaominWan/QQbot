@@ -5,7 +5,8 @@
     "gemini": "YOUR_GEMINI_API_KEY",
     "groq": "YOUR_GROQ_API_KEY",
     "openai": "YOUR_OPENAI_API_KEY",
-    "prodia": "YOUR_PRODIA_API_KEY"
+    "prodia": "YOUR_PRODIA_API_KEY",
+    "hf_token": ""
   },
   "model_settings": {
     "deepseek_base_url": "https://api.deepseek.com",

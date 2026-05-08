@@ -1,0 +1,10 @@
+{
+  "name": "qqbot",
+  "private": true,
+  "dependencies": {
+    "katex": "^0.16.45",
+    "markdown-it": "^14.1.0",
+    "markdown-it-texmath": "^1.0.0",
+    "puppeteer": "^24.0.0"
+  }
+}

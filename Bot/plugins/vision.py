@@ -1,17 +1,10 @@
-import base64
 import aiohttp
 import httpx
 from aiohttp import ClientTimeout
 
-from config import OPENROUTER_API_KEY, PROXY_URL
+from config import HF_TOKEN, PROXY_URL
 
-_OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-_VISION_MODEL = "google/gemini-2.0-flash-exp:free"
-_PROMPT = (
-    "请用中文简洁描述这张图片，"
-    "包括文字内容、人物、场景、物品等关键信息。"
-    "如果是表情包或截图请说明。"
-)
+_HF_API_URL = "https://router.huggingface.co/hf-inference/models/Salesforce/blip-image-captioning-large"
 
 
 def _guess_mime(url: str) -> str:
@@ -39,27 +32,13 @@ async def fetch_image(url: str) -> bytes | None:
 
 
 async def describe_image(image_bytes: bytes, url: str = "") -> str:
-    """Describe image content in Chinese via OpenRouter (Gemini 2.0 Flash)."""
-    if not OPENROUTER_API_KEY:
-        return "[未配置 OpenRouter API Key，无法识别图片]"
+    """Describe image content via HuggingFace BLIP captioning model."""
+    if not HF_TOKEN:
+        return "[未配置 HuggingFace Token (hf_token)，无法识别图片]"
 
-    mime = _guess_mime(url)
-    b64 = base64.b64encode(image_bytes).decode()
-    data_url = f"data:{mime};base64,{b64}"
-
-    payload = {
-        "model": _VISION_MODEL,
-        "messages": [{
-            "role": "user",
-            "content": [
-                {"type": "text", "text": _PROMPT},
-                {"type": "image_url", "image_url": {"url": data_url}},
-            ],
-        }],
-    }
     headers = {
-        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-        "Content-Type": "application/json",
+        "Authorization": f"Bearer {HF_TOKEN}",
+        "Content-Type": "application/octet-stream",
     }
 
     try:
@@ -67,12 +46,18 @@ async def describe_image(image_bytes: bytes, url: str = "") -> str:
         if PROXY_URL:
             client_kwargs["proxy"] = PROXY_URL
         async with httpx.AsyncClient(**client_kwargs) as client:
-            resp = await client.post(_OPENROUTER_URL, headers=headers, json=payload)
+            resp = await client.post(_HF_API_URL, headers=headers, content=image_bytes)
+            if resp.status_code == 503:
+                return "[图片识别模型加载中，请稍后再试]"
             resp.raise_for_status()
             data = resp.json()
-            return data["choices"][0]["message"]["content"]
+            if isinstance(data, list) and data:
+                caption = data[0].get("generated_text", "")
+            else:
+                caption = str(data)
+            return f"[图片内容：{caption}]"
     except Exception as exc:
-        print(f"[Vision] OpenRouter API error: {exc}")
+        print(f"[Vision] HuggingFace API error: {exc}")
         return f"[图片识别失败: {exc}]"
 
 

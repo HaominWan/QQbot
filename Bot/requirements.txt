@@ -20,3 +20,4 @@ latex
 selenium
 chromadb
 sentence-transformers
+huggingface_hub

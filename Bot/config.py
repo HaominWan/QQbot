@@ -20,6 +20,7 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY") or api_keys.get("gemini", "")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY") or api_keys.get("groq", "")
 PRODIA_API_KEY = os.environ.get("PRODIA_API_KEY") or api_keys.get("prodia", "")
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY") or api_keys.get("openrouter", "")
+HF_TOKEN = os.environ.get("HF_TOKEN") or api_keys.get("hf_token", "")
 
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY") or api_keys.get("deepseek", "")
 DEEPSEEK_BASE_URL = model_settings.get("deepseek_base_url", "https://api.deepseek.com")
