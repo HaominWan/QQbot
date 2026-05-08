@@ -50,9 +50,9 @@ class CommandHandler:
 .md / .markdown    Markdown 渲染
 .YGO               查询游戏王卡片
 .P5                生成 P5 预告信
-.jm                下载 JM 并生成 PDF  🔧
+.jm                下载 JM 并生成 PDF
 ========================
-★ 超级用户专属指令  🔧 维修中"""
+★ 超级用户专属指令"""
         self._register_tools()
 
     def _register_tools(self):
@@ -337,45 +337,41 @@ class CommandHandler:
         )
 
     async def _handle_jm_group(self, ws, message_content: str, group_id: int, **kwargs):
-        await self._send_group_text(ws, group_id, ".jm 指令正在维修中，暂时无法使用")
-        return
-
         command_content = self.extract_command_content(message_content, CommandType.JM)
+        await self._send_group_text(ws, group_id, f"好好好，{command_content} 嘛，这就去给你搬过来~")
         jm_pdf = await jm2pdf.get_pdf(command_content)
         if jm_pdf == 0:
-            await self._send_group_text(ws, group_id, "抱歉，未找到相关本子信息。")
+            await self._send_group_text(ws, group_id, f"翻了个遍没找到 {command_content}，编号没搞错吧？还是被和谐了？")
             return
 
         try:
             await self.bot_interfaces["upload_group_file"](
                 ws,
                 group_id,
-                jm_pdf,
+                os.path.abspath(jm_pdf),
                 f"{command_content}.pdf",
-                "jm",
+                "/",
             )
-            await self._send_group_text(ws, group_id, "发送完成")
+            await self._send_group_text(ws, group_id, "Get Da★Ze☆~ 少🦌一点哦，已发至群文件，好好欣赏哦")
         finally:
             self._cleanup_jm_tmp(jm_pdf, command_content)
 
     async def _handle_jm_private(self, ws, message_content: str, user_id: int, **kwargs):
-        await self._send_private_text(ws, user_id, ".jm 指令正在维修中，暂时无法使用")
-        return
-
         command_content = self.extract_command_content(message_content, CommandType.JM)
+        await self._send_private_text(ws, user_id, f"好好好，{command_content} 嘛，这就去给你搬过来~")
         jm_pdf = await jm2pdf.get_pdf(command_content)
         if jm_pdf == 0:
-            await self._send_private_text(ws, user_id, "抱歉，未找到相关本子信息。")
+            await self._send_private_text(ws, user_id, f"翻了个遍没找到 {command_content}，编号没搞错吧？还是被和谐了？")
             return
 
         try:
             await self.bot_interfaces["upload_private_file"](
                 ws,
                 user_id,
-                jm_pdf,
+                os.path.abspath(jm_pdf),
                 f"{command_content}.pdf",
             )
-            await self._send_private_text(ws, user_id, "发送完成")
+            await self._send_private_text(ws, user_id, "Get Da★Ze☆~ 少🦌一点哦，发过去了，好好欣赏哦")
         finally:
             self._cleanup_jm_tmp(jm_pdf, command_content)
 
