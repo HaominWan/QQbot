@@ -32,6 +32,7 @@ running_tasks = []
 proxy_url = PROXY_URL
 
 crash_signal = False
+startup_notice_sent = False
 
 
 def test_if_super_user(user_id):
@@ -196,6 +197,25 @@ async def send_private_message(ws, user_id, message, auto_escape=False):
         else:
             print("[NapCat]No response received or crash signal triggered")
         return None
+
+async def notify_super_users_bot_started(ws):
+    global startup_notice_sent
+    if startup_notice_sent:
+        return
+    startup_notice_sent = True
+
+    if not super_users:
+        print("[Startup] No super users configured, startup notice skipped.")
+        return
+
+    await asyncio.sleep(1)
+    message = [{"type": "text", "data": {"text": "Bot已启用"}}]
+    for user_id in super_users:
+        try:
+            await send_private_message(ws, user_id, message)
+            print(f"[Startup] Startup notice sent to super user {user_id}.")
+        except Exception as exc:
+            print(f"[Startup] Failed to send startup notice to {user_id}: {exc}")
 
 async def upload_group_file(ws, group_id, file, name, folder):
     # url = '/upload_group_file'
@@ -442,6 +462,7 @@ async def serve():
         print(f"[NapCat]NapCat connected from path: {path}")
         if handlers is None:
             await hot_reload("handlers")
+        loop.create_task(notify_super_users_bot_started(ws))
         while not server_close_signal:
             try:
                 if unexcepted_error_happened:
@@ -476,6 +497,9 @@ async def serve():
                 task.add_done_callback(remove_task)
                 #await execute_function(websocket, response)
                 retry = 0
+            except websockets.exceptions.ConnectionClosed as e:
+                print(f"[NapCat]Connection closed: {e}")
+                break
             except Exception as e:
                 traceback.print_exc()
                 print("[NapCat]Failed to process message: ", str(e))

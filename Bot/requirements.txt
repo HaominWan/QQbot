@@ -3,6 +3,7 @@ groq
 websockets
 aiohttp
 requests
+httpx
 chardet
 typst
 markdown
@@ -13,6 +14,7 @@ Pillow
 emoji
 aiofiles
 lxml
+jmcomic
 pyppeteer
 wikipedia
 tiktoken

@@ -1,5 +1,7 @@
 # QQBot
 
+> Linux deployment: see [LINUX.md](LINUX.md).
+
 基于 [NapCatQQ](https://github.com/NapNeko/NapCatQQ) + Python 的 QQ 机器人，以 DeepSeek 为主对话模型，内置丛雨角色扮演人格，支持图片/视频识别、Markdown/公式渲染、表情包系统、向量长期记忆等多模态能力。
 
 ## 功能一览

@@ -4,6 +4,7 @@ const texmath   = require('markdown-it-texmath');
 const katex     = require('katex');
 const fs        = require('fs');
 const path      = require('path');
+const { pathToFileURL } = require('url');
 
 const KATEX_CSS = path.join(
     path.dirname(require.resolve('katex/dist/katex.min.css')),
@@ -27,10 +28,10 @@ async function renderMarkdownToImage(mdFilePath, outputPath) {
     await page.setViewport({ width: 800, height: 600 });
 
     // Resolve katex font URLs to absolute file:// paths so they load offline
-    const katexDistDir = path.dirname(KATEX_CSS).replace(/\\/g, '/');
+    const katexFontsUrl = pathToFileURL(path.join(path.dirname(KATEX_CSS), 'fonts')).href + '/';
     const katexCssAbsolute = katexCss.replace(
         /url\(fonts\//g,
-        `url(file:///${katexDistDir}/fonts/`
+        `url(${katexFontsUrl}`
     );
 
     const htmlContent = `<!DOCTYPE html>
