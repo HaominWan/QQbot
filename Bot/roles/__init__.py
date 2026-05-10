@@ -1,16 +1,45 @@
-# 导出角色对外接口，供 persona_engine 调用。
-#
-# 快速接入自定义角色：
-#   1. 复制 example_card.py，实现 get_xxx_role(user_qq, bot_qq) 函数。
-#   2. 在下方 import 并导出它。
-#   3. 在 persona_engine.py 的 get_system_role() 中引用即可。
-#
-# 示例（取消注释后使用）：
-# from .example_card import get_example_intimate_role, get_example_casual_role
+"""Role exports used by persona_engine.
+
+Private Murasame role cards are optional. When they are not present in a public
+checkout, use a small built-in fallback so message handling never crashes.
+"""
+
+
+def _fallback_role(user_qq: int, bot_qq: int, mode: str) -> str:
+    relation = "master" if mode == "master" else "guardian"
+    return (
+        f"You are QQ bot {bot_qq}. "
+        f"Talk naturally with user {user_qq} in {relation} mode. "
+        "Reply in Chinese unless the user asks otherwise. "
+        "Be helpful, concise, and avoid pretending to have unavailable private persona files."
+    )
 
 try:
-    from .Murasame_goshujin import *
-    from .Murasame_customers import *
+    from .Murasame_goshujin import get_Murasame_goshujin_role
 except ImportError:
-    # 自定义角色文件不在仓库中时忽略，使用者自行实现并导入。
-    pass
+    try:
+        from .murasame_card import build_murasame_role
+
+        def get_Murasame_goshujin_role(user_qq: int, bot_qq: int) -> str:
+            return build_murasame_role(user_qq, bot_qq, master_id=user_qq, mode="master")
+    except ImportError:
+        def get_Murasame_goshujin_role(user_qq: int, bot_qq: int) -> str:
+            return _fallback_role(user_qq, bot_qq, "master")
+
+try:
+    from .Murasame_customers import get_Murasame_customs_role
+except ImportError:
+    try:
+        from .murasame_card import build_murasame_role
+
+        def get_Murasame_customs_role(user_qq: int, bot_qq: int) -> str:
+            return build_murasame_role(user_qq, bot_qq, master_id=0, mode="guardian")
+    except ImportError:
+        def get_Murasame_customs_role(user_qq: int, bot_qq: int) -> str:
+            return _fallback_role(user_qq, bot_qq, "guardian")
+
+
+__all__ = [
+    "get_Murasame_goshujin_role",
+    "get_Murasame_customs_role",
+]

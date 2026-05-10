@@ -72,7 +72,7 @@ dir_rule:
   # base_dir: 根目录。
   # 此配置也支持引用环境变量，例如
   # base_dir: ${JM_DIR}/下载文件夹/
-  base_dir: Bot/tmp
+  base_dir: ${JM_DIR}/tmp
 
   # rule: 规则dsl。
   # 本项只建议了解编程的朋友定制，实现在这个类: jmcomic.jm_option.DirRule

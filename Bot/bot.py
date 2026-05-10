@@ -497,6 +497,9 @@ async def serve():
                 task.add_done_callback(remove_task)
                 #await execute_function(websocket, response)
                 retry = 0
+            except websockets.exceptions.ConnectionClosed as e:
+                print(f"[NapCat]Connection closed: {e}")
+                break
             except Exception as e:
                 traceback.print_exc()
                 print("[NapCat]Failed to process message: ", str(e))

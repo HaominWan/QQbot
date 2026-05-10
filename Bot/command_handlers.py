@@ -2,16 +2,17 @@ import asyncio
 import os
 import shutil
 import subprocess
+import sys
 from enum import Enum
+from pathlib import Path
 from typing import Optional
 
 from plugins import P5_card, YGO_find_card, drawing, jm2pdf, markdown, typst_renderer
 from tool_router import Tool, ToolRouter, ToolScope
 
-_RESTART_SCRIPT = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "run.bat",
-)
+_BOT_DIR = Path(__file__).resolve().parent
+_ROOT_DIR = _BOT_DIR.parent
+_WINDOWS_RESTART_SCRIPT = _ROOT_DIR / "run.bat"
 
 
 class CommandType(Enum):
@@ -211,10 +212,30 @@ class CommandHandler:
 
     async def _trigger_restart(self):
         await asyncio.sleep(0.8)
-        subprocess.Popen(
-            ["cmd.exe", "/c", _RESTART_SCRIPT],
-            creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
+        if os.name == "nt":
+            subprocess.Popen(
+                ["cmd.exe", "/c", str(_WINDOWS_RESTART_SCRIPT)],
+                creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
+            )
+            return
+
+        restart_code = (
+            "import os, sys, time; "
+            "time.sleep(1); "
+            f"os.chdir({str(_BOT_DIR)!r}); "
+            f"os.execv({sys.executable!r}, [{sys.executable!r}, 'bot.py'])"
         )
+        log_path = _ROOT_DIR / "startup.log"
+        log = open(log_path, "ab")
+        subprocess.Popen(
+            [sys.executable, "-c", restart_code],
+            stdin=subprocess.DEVNULL,
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+            close_fds=True,
+        )
+        os._exit(0)
 
     async def _handle_stop_group(
         self,
@@ -239,16 +260,17 @@ class CommandHandler:
 
     async def _do_stop(self):
         await asyncio.sleep(0.8)
-        # Only kill the NapCat-injected QQ process (identified by --enable-logging).
-        # Plain personal QQ does not carry this flag and must not be touched.
-        subprocess.run(
-            [
-                "wmic", "process",
-                "where", "name='QQ.exe' and commandline like '%--enable-logging%'",
-                "call", "terminate",
-            ],
-            creationflags=subprocess.CREATE_NO_WINDOW,
-        )
+        if os.name == "nt":
+            # Only kill the NapCat-injected QQ process (identified by --enable-logging).
+            # Plain personal QQ does not carry this flag and must not be touched.
+            subprocess.run(
+                [
+                    "wmic", "process",
+                    "where", "name='QQ.exe' and commandline like '%--enable-logging%'",
+                    "call", "terminate",
+                ],
+                creationflags=subprocess.CREATE_NO_WINDOW,
+            )
         os._exit(0)
 
     async def _handle_clean_group(
@@ -379,6 +401,6 @@ class CommandHandler:
         if jm_pdf and os.path.exists(jm_pdf):
             os.remove(jm_pdf)
 
-        tmp_dir = os.path.join("Bot", "tmp", command_content)
+        tmp_dir = _BOT_DIR / "tmp" / command_content
         if os.path.isdir(tmp_dir):
             shutil.rmtree(tmp_dir, ignore_errors=True)
