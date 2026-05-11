@@ -10,6 +10,39 @@ import tempfile
 _MAX_RETRIES = 5
 _RETRY_DELAY = 2.0
 
+
+def _usage_value(usage, name):
+    if isinstance(usage, dict):
+        return usage.get(name)
+    return getattr(usage, name, None)
+
+
+def _log_deepseek_usage(usage):
+    prompt_tokens = _usage_value(usage, "prompt_tokens")
+    completion_tokens = _usage_value(usage, "completion_tokens")
+    total_tokens = _usage_value(usage, "total_tokens")
+    cache_hit = _usage_value(usage, "prompt_cache_hit_tokens")
+    cache_miss = _usage_value(usage, "prompt_cache_miss_tokens")
+
+    if prompt_tokens is None and cache_hit is not None and cache_miss is not None:
+        prompt_tokens = cache_hit + cache_miss
+
+    hit_rate = None
+    if prompt_tokens and cache_hit is not None:
+        hit_rate = cache_hit / prompt_tokens
+
+    hit_rate_text = f"{hit_rate:.1%}" if hit_rate is not None else "n/a"
+    print(
+        "[DeepSeek usage] "
+        f"prompt={prompt_tokens}, "
+        f"cache_hit={cache_hit}, "
+        f"cache_miss={cache_miss}, "
+        f"hit_rate={hit_rate_text}, "
+        f"completion={completion_tokens}, "
+        f"total={total_tokens}"
+    )
+
+
 async def call_llm_api(chat_history):
     if not DEEPSEEK_API_KEY:
         raise RuntimeError("DeepSeek API key is not configured")
@@ -20,6 +53,7 @@ async def call_llm_api(chat_history):
         temperature=DEEPSEEK_TEMPERATURE,
         top_p=1,
         stream=True,
+        stream_options={"include_usage": True},
     )
     if DEEPSEEK_MODEL.startswith("deepseek-v4"):
         request_payload["extra_body"] = {"thinking": {"type": "disabled"}}
@@ -36,6 +70,8 @@ async def call_llm_api(chat_history):
             response = await client.chat.completions.create(**request_payload)
             full_response = ""
             async for chunk in response:
+                if getattr(chunk, "usage", None):
+                    _log_deepseek_usage(chunk.usage)
                 if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
                     full_response += chunk.choices[0].delta.content
             return full_response

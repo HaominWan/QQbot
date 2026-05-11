@@ -96,8 +96,10 @@ npm install markdown-it markdown-it-texmath katex puppeteer
   "memory_settings": {
     "enabled":        true,
     "db_path":        "./memory_db",
-    "window_size":    30,
-    "search_results": 6
+    "window_size":        30,
+    "search_results":     3,
+    "context_max_chars":  1500,
+    "context_placement":  "user_message"
   }
 }
 ```
@@ -115,7 +117,9 @@ npm install markdown-it markdown-it-texmath katex puppeteer
 | `test_groups` | 允许 Bot 响应的群号列表 | 必填 |
 | `proxy_url` | HTTP 代理 | 按需填写 |
 | `memory_settings.window_size` | 内存中保留的最近消息数 | 默认 30 |
-| `memory_settings.search_results` | 每次从向量 DB 检索的历史条数 | 默认 6 |
+| `memory_settings.search_results` | 每次从向量 DB 检索的历史条数 | 默认 3 |
+| `memory_settings.context_max_chars` | 长期记忆注入 LLM 上下文的最大字符数 | 默认 1500 |
+| `memory_settings.context_placement` | 长期记忆注入位置，`user_message` 更有利于缓存命中 | 默认 `user_message` |
 
 ### 3. 配置 NapCatQQ
 
