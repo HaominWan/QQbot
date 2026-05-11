@@ -1,47 +1,21 @@
 """
-游戏王查卡模块 —— 爬取 db.yugioh-card-cn.com，支持中文卡名搜索。
-使用 Edge 无头浏览器；驱动版本通过 httpx+代理 自动下载并缓存。
+游戏王查卡模块 —— 使用百鸽 API 查询中文卡片信息。
 """
 
-import asyncio
-import io
-import os
-import subprocess
-import zipfile
-from pathlib import Path
+import base64
+from typing import Any
 
 import httpx
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.chrome.options import Options as ChromeOptions
-from selenium.webdriver.chrome.service import Service as ChromeService
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.ui import WebDriverWait
 
 from config import PROXY_URL
 
-_SEARCH_URL = "https://db.yugioh-card-cn.com/card_search.action.html"
+_API_BASE = "https://ygocdb.com/api/v0"
+_IMAGE_BASE = "https://cdn.233.momobako.com/ygoimg/ygopro"
+_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+)
 
-# We removed manual edgedriver downloads, now relying on selenium manager for Chrome.
-
-
-# ── selenium helpers ───────────────────────────────────────────────────────────
-
-def _make_driver() -> webdriver.Chrome:
-    options = ChromeOptions()
-    options.add_argument("--headless")
-    options.add_argument("--disable-gpu")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--disable-extensions")
-    options.add_argument("--ignore-certificate-errors")
-    
-    # We use Selenium Manager to automatically fetch the driver for Chrome without explicit proxy logic here.
-    return webdriver.Chrome(service=ChromeService(), options=options)
-
-
-# ── message segment helpers ────────────────────────────────────────────────────
 
 def _text_seg(text: str) -> dict:
     return {"type": "text", "data": {"text": text}}
@@ -51,117 +25,127 @@ def _image_seg(url: str) -> dict:
     return {"type": "image", "data": {"file": url, "type": "show"}}
 
 
-import urllib.parse
-import json
-import base64
+def _client_kwargs() -> dict[str, Any]:
+    kwargs: dict[str, Any] = {
+        "timeout": httpx.Timeout(12.0, connect=8.0),
+        "verify": False,
+        "headers": {"User-Agent": _USER_AGENT},
+    }
+    return kwargs
 
-# ── scraping logic ─────────────────────────────────────────────────────────────
 
-def _scrape_cards(card_name: str) -> list:
-    """Synchronous scrape — run inside asyncio.to_thread."""
-    driver = _make_driver()
+def _make_client() -> httpx.AsyncClient:
+    kwargs = _client_kwargs()
+    if not PROXY_URL:
+        return httpx.AsyncClient(**kwargs)
+
     try:
-        params = {
-            "titleId": "1",
-            "keyword": card_name,
-            "searchType": "1",
-            "keywordLang": "0", "cardType": "", "starList": [], "penScaleList": [], "linkMarkerList": [],
-            "linkCondition": "1", "atkFrom": "", "atkTo": "", "defFrom": "", "defTo": "", "attributeList": [],
-            "effectList": [], "speciesList": [], "otherItemList": [], "otherCondition": "1", "exclusionList": [],
-            "linkBtn": [], "sort": "1", "ullist": 0, "pageSize": "10", "page": "1", "mode": "1"
-        }
-        
-        # User provided explicit encoding format where quotes remain unescaped:
-        json_str = json.dumps(params, ensure_ascii=False, separators=(',', ':'))
-        # Only encode { } [ ] safe allows quotes and colons commas
-        encoded_params = urllib.parse.quote(json_str, safe='"/:,')
-        direct_url = f"https://db.yugioh-card-cn.com/card_search.action_list.html?params={encoded_params}"
-        
-        driver.get(direct_url)
+        return httpx.AsyncClient(**kwargs, proxy=PROXY_URL)
+    except TypeError:
+        return httpx.AsyncClient(**kwargs, proxies=PROXY_URL)
 
-        try:
-            WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, ".t_row"))
-            )
-        except Exception:
-            pass
 
-        card_entries = []
-        
-        items = driver.find_elements(By.CSS_SELECTOR, ".t_row")
-            
-        for card in items[:5]:
-            try:
-                name = card.find_element(By.CSS_SELECTOR, ".card_name").text.strip()
-                    
-                try:
-                    effect = card.find_element(By.CLASS_NAME, "box_card_text").text.strip()
-                except:
-                    effect = ""
-                    
-                types = []
-                # Clean up duplicated elements by tracking seen
-                seen_types = set()
-                for e in card.find_elements(By.CSS_SELECTOR, ".box_card_spec span"):
-                    t = e.text.strip().replace("\n", " ").replace("【", "").replace("】", "")
-                    if t and t not in seen_types and "link" not in t.lower() and "SPELL" not in t:
-                        seen_types.add(t)
-                        types.append(t)
-                
-                image_url = ""
-                try:
-                    img = card.find_element(By.CSS_SELECTOR, ".box_card_img img")
-                    image_url = img.get_attribute("src") or ""
-                except Exception:
-                    pass
+def _normalize_types(types: Any) -> str:
+    if isinstance(types, dict):
+        types = types.get("types", "")
+    if isinstance(types, list):
+        return " ".join(str(t).strip() for t in types if str(t).strip())
+    if isinstance(types, str):
+        return types.strip()
+    return ""
 
-                card_entries.append({
-                    "name": name, "effect": effect,
-                    "types": types, "image_url": image_url,
-                })
-            except Exception:
-                continue
 
-        if not card_entries:
-            return [_text_seg(f"未找到「{card_name}」相关卡片。")]
+def _card_name(card: dict[str, Any]) -> str:
+    for key in ("cn_name", "sc_name", "md_name", "nwbbs_n", "en_name", "jp_name"):
+        value = card.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return str(card.get("id") or "未知卡片")
 
-        segments: list = []
-        for i, entry in enumerate(card_entries):
-            lines = [f"【{entry['name']}】 {' '.join(entry['types'])}"]
-            eff = entry["effect"]
-            lines.append(eff[:200] + ("…" if len(eff) > 200 else ""))
+
+def _card_text(card: dict[str, Any]) -> str:
+    text = card.get("text")
+    if isinstance(text, dict):
+        parts = [text.get("pdesc"), text.get("desc")]
+        return "\n".join(str(part).strip() for part in parts if str(part).strip())
+
+    text = text or card.get("desc") or card.get("pdesc") or ""
+    return str(text).strip()
+
+
+def _image_url(card: dict[str, Any]) -> str:
+    card_id = card.get("id")
+    if not card_id:
+        return ""
+    return f"{_IMAGE_BASE}/{card_id}.webp!half"
+
+
+async def _download_image_as_base64(client: httpx.AsyncClient, image_url: str) -> str:
+    try:
+        resp = await client.get(image_url)
+        resp.raise_for_status()
+    except Exception as exc:
+        print(f"[YGO] Failed to download image {image_url}: {exc}")
+        return image_url
+
+    b64_data = base64.b64encode(resp.content).decode("utf-8")
+    return f"base64://{b64_data}"
+
+
+async def _search_cards(card_name: str) -> list[dict[str, Any]]:
+    async with _make_client() as client:
+        resp = await client.get(f"{_API_BASE}/", params={"search": card_name})
+        resp.raise_for_status()
+        payload = resp.json()
+
+        cards = payload.get("result", [])
+        if not isinstance(cards, list):
+            return []
+
+        return [card for card in cards if isinstance(card, dict)]
+
+
+async def _format_cards(card_name: str) -> list:
+    cards = await _search_cards(card_name)
+    if not cards:
+        return [_text_seg(f"未找到「{card_name}」相关卡片。")]
+
+    segments: list = []
+    async with _make_client() as client:
+        for i, card in enumerate(cards[:5]):
+            name = _card_name(card)
+            types = _normalize_types(card.get("types") or card.get("text"))
+            text = _card_text(card)
+
+            lines = [f"【{name}】 {types}".rstrip()]
+            if text:
+                lines.append(text[:200] + ("..." if len(text) > 200 else ""))
+            else:
+                lines.append("暂无效果文本。")
 
             if i > 0:
                 segments.append(_text_seg("\n\n─────────────────\n\n"))
             segments.append(_text_seg("\n".join(lines)))
-            if entry.get("image_url"):
-                try:
-                    # Download image directly to bypass NapCat timeout/blocking issues
-                    with httpx.Client(verify=False, timeout=10.0, proxies=PROXY_URL) as client:
-                        resp = client.get(entry["image_url"], headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"})
-                        if resp.status_code == 200:
-                            b64_data = base64.b64encode(resp.content).decode("utf-8")
-                            segments.append(_image_seg(f"base64://{b64_data}"))
-                        else:
-                            segments.append(_image_seg(entry["image_url"]))
-                except Exception as e:
-                    print(f"Failed to download image {entry['image_url']}: {e}")
-                    segments.append(_image_seg(entry["image_url"]))
 
-        return segments
-    finally:
-        driver.quit()
+            image_url = _image_url(card)
+            if image_url:
+                image_file = await _download_image_as_base64(client, image_url)
+                segments.append(_image_seg(image_file))
 
+    return segments
 
-# ── public API ─────────────────────────────────────────────────────────────────
 
 async def get_card_info(card_name: str) -> list:
     """
     Search for up to 5 YGO cards matching card_name.
     Returns a flat OneBot message segment list (text + image per card).
     """
+    card_name = card_name.strip()
+    if not card_name:
+        return [_text_seg("请输入要查询的卡名，例如：.YGO 青眼白龙")]
+
     try:
-        return await asyncio.to_thread(_scrape_cards, card_name)
+        return await _format_cards(card_name)
     except Exception as exc:
-        print(f"[YGO] Scrape error: {exc}")
+        print(f"[YGO] API error: {exc}")
         return [_text_seg(f"[YGO] 查询失败：{exc}")]

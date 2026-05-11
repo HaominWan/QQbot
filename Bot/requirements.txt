@@ -19,7 +19,6 @@ pyppeteer
 wikipedia
 tiktoken
 latex
-selenium
 chromadb
 sentence-transformers
 huggingface_hub
