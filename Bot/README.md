@@ -184,12 +184,15 @@ python bot.py
 | `.reset` | 重启 Bot 进程（同时重启 NapCat 如未运行） | ★ |
 | `.stop` | 强制停止 Bot 与 NapCat | ★ |
 | `.clean` | 清空当前群的向量记忆数据库 | ★ |
+| `.ban <插件名>` | 在当前群禁用可管理插件，例如 `.ban jm` | ★ |
+| `.unban <插件名>` | 在当前群重新启用插件，例如 `.unban jm` | ★ |
 | `.draw <提示词>` | AI 绘图（HuggingFace FLUX） | 所有人 |
 | `.typ <代码>` | 渲染 Typst 代码为图片 | 所有人 |
 | `.md <文本>` | 渲染 Markdown 为图片 | 所有人 |
 | `.YGO <卡名>` | 游戏王查卡 | 所有人 |
 | `.P5 <内容>` | P5 风格预告信 | 所有人 |
 | `.jm <编号>` | 下载 JMComic 并转 PDF | 🔧 |
+| `.jm recommend [数量]` | 获取今日 JM 推荐栏本子编号，默认 10 个、最多 20 个 | 所有人 |
 | `.pixiv <PID/tag/关键词> [-n 1-3]` | Pixiv 搜图，按质量评分后随机返回 | 所有人 |
 | `.pixiv recommend [-n 1-3]` | Pixiv 每日推荐，随机返回排行榜高质量图 | 所有人 |
 

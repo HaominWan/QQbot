@@ -20,6 +20,8 @@ class Tool:
     group_handler: Optional[ToolHandler] = None
     private_handler: Optional[ToolHandler] = None
     description: str = ""
+    super_only: bool = False
+    controllable: bool = False
 
     def supports(self, scope: ToolScope) -> bool:
         if scope == ToolScope.GROUP:
@@ -42,12 +44,17 @@ class ToolRouter:
     def __init__(self):
         self._tools: Dict[Any, Tool] = {}
         self._prefixes: Dict[str, Tool] = {}
+        self._names: Dict[str, Tool] = {}
 
     def register(self, tool: Tool) -> None:
         if tool.command_type in self._tools:
             raise ValueError(f"Tool command already registered: {tool.command_type}")
+        name_key = tool.name.lower()
+        if name_key in self._names:
+            raise ValueError(f"Tool name already registered: {tool.name}")
 
         self._tools[tool.command_type] = tool
+        self._names[name_key] = tool
         for prefix in tool.prefixes:
             if prefix in self._prefixes:
                 raise ValueError(f"Tool prefix already registered: {prefix}")
@@ -74,6 +81,32 @@ class ToolRouter:
         if match is None:
             return None
         return match.tool.command_type
+
+    def get_tool(self, command_type: Any) -> Optional[Tool]:
+        return self._tools.get(command_type)
+
+    def find_tool(self, name_or_prefix: str) -> Optional[Tool]:
+        key = name_or_prefix.strip().lstrip(".").lower()
+        if not key:
+            return None
+
+        tool = self._names.get(key)
+        if tool is not None:
+            return tool
+
+        for command_type, registered in self._tools.items():
+            value = getattr(command_type, "value", command_type)
+            if str(value).lower() == key:
+                return registered
+
+        for prefix, registered in self._prefixes.items():
+            if prefix.lstrip(".").lower() == key:
+                return registered
+
+        return None
+
+    def controllable_tools(self) -> List[Tool]:
+        return [tool for tool in self._tools.values() if tool.controllable]
 
     def extract_content(self, message_content: str, command_type: Any) -> str:
         match = self.match(message_content)

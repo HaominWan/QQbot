@@ -39,6 +39,7 @@ Bot/.venv/
 Bot/myenv/
 Bot/tmp/
 Bot/memory_db/
+Bot/data/group_plugin_bans.json
 *.egg-info/
 dist/
 build/

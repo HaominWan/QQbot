@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Optional
 
 from plugins import P5_card, YGO_find_card, drawing, jm2pdf, markdown, pixiv, typst_renderer
+from plugin_state import GroupPluginBanStore
 from tool_router import Tool, ToolRouter, ToolScope
 
 _BOT_DIR = Path(__file__).resolve().parent
@@ -27,6 +28,8 @@ class CommandType(Enum):
     P5 = "P5"
     JM = "jm"
     PIXIV = "pixiv"
+    BAN = "ban"
+    UNBAN = "unban"
 
 
 class MessageType(Enum):
@@ -42,17 +45,21 @@ class CommandHandler:
         self.user_sessions = user_sessions
         self.session_manager = session_manager
         self.tool_router = ToolRouter()
+        self.group_plugin_bans = GroupPluginBanStore(_BOT_DIR / "data" / "group_plugin_bans.json")
         self.help_message = """========================
 .help              查看此帮助
 .reset             重启 Bot            ★
 .stop              强制停止 Bot        ★
 .clean             清空当前群记忆      ★
+.ban <插件名>      禁用本群插件        ★
+.unban <插件名>    启用本群插件        ★
 .draw              AI 绘图
 .typ / .typst      Typst 渲染
 .md / .markdown    Markdown 渲染
 .YGO               查询游戏王卡片
 .P5                生成 P5 预告信
 .jm                下载 JM 并生成 PDF
+.jm recommend      今日 JM 推荐
 .pixiv             Pixiv 搜图
 ========================
 ★ 超级用户专属指令"""
@@ -76,6 +83,7 @@ class CommandHandler:
                     group_handler=self._handle_reset_group,
                     private_handler=self._handle_reset_private,
                     description="重启 Bot",
+                    super_only=True,
                 ),
                 Tool(
                     name="stop",
@@ -84,6 +92,7 @@ class CommandHandler:
                     group_handler=self._handle_stop_group,
                     private_handler=self._handle_stop_private,
                     description="强制停止 Bot",
+                    super_only=True,
                 ),
                 Tool(
                     name="clean",
@@ -92,6 +101,25 @@ class CommandHandler:
                     group_handler=self._handle_clean_group,
                     private_handler=self._handle_clean_private,
                     description="清空当前群向量记忆",
+                    super_only=True,
+                ),
+                Tool(
+                    name="ban",
+                    command_type=CommandType.BAN,
+                    prefixes=[".ban"],
+                    group_handler=self._handle_ban_group,
+                    private_handler=self._handle_ban_private,
+                    description="禁用本群插件",
+                    super_only=True,
+                ),
+                Tool(
+                    name="unban",
+                    command_type=CommandType.UNBAN,
+                    prefixes=[".unban"],
+                    group_handler=self._handle_unban_group,
+                    private_handler=self._handle_unban_private,
+                    description="启用本群插件",
+                    super_only=True,
                 ),
                 Tool(
                     name="draw",
@@ -100,6 +128,7 @@ class CommandHandler:
                     group_handler=self._handle_draw_group,
                     private_handler=self._handle_draw_private,
                     description="AI 绘图",
+                    controllable=True,
                 ),
                 Tool(
                     name="typst",
@@ -108,6 +137,7 @@ class CommandHandler:
                     group_handler=self._handle_typst_group,
                     private_handler=self._handle_typst_private,
                     description="Typst 渲染",
+                    controllable=True,
                 ),
                 Tool(
                     name="markdown",
@@ -116,6 +146,7 @@ class CommandHandler:
                     group_handler=self._handle_markdown_group,
                     private_handler=self._handle_markdown_private,
                     description="Markdown 渲染",
+                    controllable=True,
                 ),
                 Tool(
                     name="ygo",
@@ -124,6 +155,7 @@ class CommandHandler:
                     group_handler=self._handle_ygo_group,
                     private_handler=self._handle_ygo_private,
                     description="查询游戏王卡片",
+                    controllable=True,
                 ),
                 Tool(
                     name="p5",
@@ -132,6 +164,7 @@ class CommandHandler:
                     group_handler=self._handle_p5_group,
                     private_handler=self._handle_p5_private,
                     description="生成 P5 预告信",
+                    controllable=True,
                 ),
                 Tool(
                     name="jm",
@@ -140,6 +173,7 @@ class CommandHandler:
                     group_handler=self._handle_jm_group,
                     private_handler=self._handle_jm_private,
                     description="下载 JM 并生成 PDF",
+                    controllable=True,
                 ),
                 Tool(
                     name="pixiv",
@@ -148,6 +182,7 @@ class CommandHandler:
                     group_handler=self._handle_pixiv_group,
                     private_handler=self._handle_pixiv_private,
                     description="Pixiv 搜图",
+                    controllable=True,
                 ),
             ]
         )
@@ -168,6 +203,8 @@ class CommandHandler:
     ) -> bool:
         try:
             scope = ToolScope(message_type.value)
+            if await self._block_banned_group_tool(scope, command_type, ws, **kwargs):
+                return True
             return await self.tool_router.handle(
                 scope,
                 command_type,
@@ -178,6 +215,25 @@ class CommandHandler:
         except Exception as exc:
             print(f"[Command] Failed to handle {command_type}: {exc}")
             return False
+
+    async def _block_banned_group_tool(self, scope: ToolScope, command_type: CommandType, ws, **kwargs) -> bool:
+        if scope != ToolScope.GROUP:
+            return False
+
+        tool = self.tool_router.get_tool(command_type)
+        group_id = kwargs.get("group_id")
+        if tool is None or not tool.controllable or group_id is None:
+            return False
+
+        if not self.group_plugin_bans.is_banned(group_id, tool.name):
+            return False
+
+        await self._send_group_text(
+            ws,
+            group_id,
+            f"{tool.name} 插件已在本群禁用，请联系超级用户使用 .unban {tool.name} 启用",
+        )
+        return True
 
     async def _send_group_text(self, ws, group_id: int, text: str):
         await self.bot_interfaces["send_group_message"](
@@ -306,6 +362,75 @@ class CommandHandler:
     async def _handle_clean_private(self, ws, message_content: str, user_id: int, **kwargs):
         await self._send_private_text(ws, user_id, "私聊暂无向量记忆可清理")
 
+    def _manageable_tool_names(self) -> str:
+        return "、".join(tool.name for tool in self.tool_router.controllable_tools())
+
+    def _resolve_manageable_tool(self, raw_name: str):
+        tool = self.tool_router.find_tool(raw_name)
+        if tool is None or not tool.controllable:
+            return None
+        return tool
+
+    async def _handle_ban_group(
+        self,
+        ws,
+        message_content: str,
+        group_id: int,
+        user_id: int,
+        **kwargs,
+    ):
+        if not self.bot_interfaces["test_if_super_user"](user_id):
+            await self._send_group_text(ws, group_id, "权限不足，仅超级用户可禁用插件")
+            return
+
+        raw_name = self.extract_command_content(message_content, CommandType.BAN)
+        tool = self._resolve_manageable_tool(raw_name)
+        if tool is None:
+            await self._send_group_text(ws, group_id, f"请输入可管理插件名：{self._manageable_tool_names()}")
+            return
+
+        changed = self.group_plugin_bans.ban(group_id, tool.name)
+        if changed:
+            await self._send_group_text(ws, group_id, f"已在本群禁用 {tool.name} 插件")
+        else:
+            await self._send_group_text(ws, group_id, f"{tool.name} 插件已经在本群禁用")
+
+    async def _handle_unban_group(
+        self,
+        ws,
+        message_content: str,
+        group_id: int,
+        user_id: int,
+        **kwargs,
+    ):
+        if not self.bot_interfaces["test_if_super_user"](user_id):
+            await self._send_group_text(ws, group_id, "权限不足，仅超级用户可启用插件")
+            return
+
+        raw_name = self.extract_command_content(message_content, CommandType.UNBAN)
+        tool = self._resolve_manageable_tool(raw_name)
+        if tool is None:
+            await self._send_group_text(ws, group_id, f"请输入可管理插件名：{self._manageable_tool_names()}")
+            return
+
+        changed = self.group_plugin_bans.unban(group_id, tool.name)
+        if changed:
+            await self._send_group_text(ws, group_id, f"已在本群启用 {tool.name} 插件")
+        else:
+            await self._send_group_text(ws, group_id, f"{tool.name} 插件本来就是启用状态")
+
+    async def _handle_ban_private(self, ws, message_content: str, user_id: int, **kwargs):
+        if not self.bot_interfaces["test_if_super_user"](user_id):
+            await self._send_private_text(ws, user_id, "权限不足，仅超级用户可禁用插件")
+            return
+        await self._send_private_text(ws, user_id, "插件禁用只对当前群聊生效，请在群聊中使用 .ban <插件名>")
+
+    async def _handle_unban_private(self, ws, message_content: str, user_id: int, **kwargs):
+        if not self.bot_interfaces["test_if_super_user"](user_id):
+            await self._send_private_text(ws, user_id, "权限不足，仅超级用户可启用插件")
+            return
+        await self._send_private_text(ws, user_id, "插件启用只对当前群聊生效，请在群聊中使用 .unban <插件名>")
+
     async def _handle_draw_group(self, ws, message_content: str, group_id: int, **kwargs):
         prompt = self.extract_command_content(message_content, CommandType.DRAW)
         image_cq = await drawing.handle_drawing_message(prompt)
@@ -370,6 +495,10 @@ class CommandHandler:
 
     async def _handle_jm_group(self, ws, message_content: str, group_id: int, **kwargs):
         command_content = self.extract_command_content(message_content, CommandType.JM)
+        if self._is_jm_recommend_command(command_content):
+            await self._send_jm_recommend_group(ws, group_id, command_content)
+            return
+
         await self._send_group_text(ws, group_id, f"好好好，{command_content} 嘛，这就去给你搬过来~")
         jm_pdf = await jm2pdf.get_pdf(command_content)
         if jm_pdf == 0:
@@ -390,6 +519,10 @@ class CommandHandler:
 
     async def _handle_jm_private(self, ws, message_content: str, user_id: int, **kwargs):
         command_content = self.extract_command_content(message_content, CommandType.JM)
+        if self._is_jm_recommend_command(command_content):
+            await self._send_jm_recommend_private(ws, user_id, command_content)
+            return
+
         await self._send_private_text(ws, user_id, f"好好好，{command_content} 嘛，这就去给你搬过来~")
         jm_pdf = await jm2pdf.get_pdf(command_content)
         if jm_pdf == 0:
@@ -406,6 +539,44 @@ class CommandHandler:
             await self._send_private_text(ws, user_id, "Get Da★Ze☆~ 少🦌一点哦，发过去了，好好欣赏哦")
         finally:
             self._cleanup_jm_tmp(jm_pdf, command_content)
+
+    @staticmethod
+    def _is_jm_recommend_command(command_content: str) -> bool:
+        parts = command_content.strip().split(maxsplit=1)
+        return bool(parts and parts[0].lower() in {"recommend", "rec", "daily", "today"})
+
+    @staticmethod
+    def _parse_jm_recommend_limit(command_content: str) -> int:
+        parts = command_content.strip().split()
+        for part in parts[1:]:
+            if part.isdigit():
+                return max(1, min(int(part), 20))
+        return 10
+
+    @staticmethod
+    def _format_jm_recommendations(recommendations: list[dict[str, str]]) -> str:
+        if not recommendations:
+            return "今日 JM 推荐栏暂时没有解析到本子编号"
+
+        lines = ["今日 JM 推荐栏："]
+        for index, item in enumerate(recommendations, start=1):
+            title = item.get("title") or "未命名"
+            album_id = item.get("id") or "未知"
+            lines.append(f"{index}. JM{album_id} - {title}")
+        lines.append("发送 .jm <编号> 可下载对应 PDF")
+        return "\n".join(lines)
+
+    async def _send_jm_recommend_group(self, ws, group_id: int, command_content: str):
+        limit = self._parse_jm_recommend_limit(command_content)
+        await self._send_group_text(ws, group_id, "正在获取今日 JM 推荐栏...")
+        recommendations = await jm2pdf.get_daily_recommendations(limit)
+        await self._send_group_text(ws, group_id, self._format_jm_recommendations(recommendations))
+
+    async def _send_jm_recommend_private(self, ws, user_id: int, command_content: str):
+        limit = self._parse_jm_recommend_limit(command_content)
+        await self._send_private_text(ws, user_id, "正在获取今日 JM 推荐栏...")
+        recommendations = await jm2pdf.get_daily_recommendations(limit)
+        await self._send_private_text(ws, user_id, self._format_jm_recommendations(recommendations))
 
     async def _handle_pixiv_group(self, ws, message_content: str, group_id: int, **kwargs):
         command_content = self.extract_command_content(message_content, CommandType.PIXIV)
