@@ -11,9 +11,14 @@ class Group:
         self.memory = memory
         self._window_size = window_size
 
-    def add_message(self, role, message_content, user_id=None):
+    def add_message(self, role, message_content, user_id=None, mode=None):
         message_content = "by " + str(user_id) + ": " + message_content if user_id else message_content
-        self.chat_history.append({"role": role, "content": message_content})
+        message = {"role": role, "content": message_content}
+        if user_id is not None:
+            message["user_id"] = int(user_id)
+        if mode is not None:
+            message["mode"] = mode
+        self.chat_history.append(message)
         if len(self.chat_history) > self._window_size:
             self.chat_history = self.chat_history[-self._window_size:]
 
@@ -29,16 +34,27 @@ class Group:
             + "\n[历史记忆结束]"
         )
 
-    async def handle_message(self, user_id, message_content, system_role, store_user=True):
+    def _history_for_mode(self, mode: str):
+        if mode == "master":
+            return self.chat_history.copy()
+
+        filtered = []
+        for message in self.chat_history:
+            if message.get("role") == "assistant" and message.get("mode") == "master":
+                continue
+            filtered.append(message)
+        return filtered
+
+    async def handle_message(self, user_id, message_content, system_role, store_user=True, mode="guardian"):
         if self.memory and store_user:
             self.memory.store(self.group_id, user_id, message_content, "user")
 
-        self.add_message("user", message_content, user_id)
+        self.add_message("user", message_content, user_id, mode=mode)
 
         augmented_system = system_role
-        tmp_chat_history = self.chat_history.copy()
+        tmp_chat_history = self._history_for_mode(mode)
         if self.memory:
-            relevant = self.memory.search(self.group_id, message_content)
+            relevant = self.memory.search(self.group_id, message_content, mode=mode)
             if relevant:
                 memory_context = self._format_memory_context(relevant)
                 if MEMORY_CONTEXT_PLACEMENT == "system":
@@ -52,7 +68,7 @@ class Group:
         gpt_response = await call_llm_api(tmp_chat_history)
 
         if self.memory:
-            self.memory.store(self.group_id, None, gpt_response, "assistant")
-        self.add_message("assistant", gpt_response)
+            self.memory.store(self.group_id, None, gpt_response, "assistant", mode=mode)
+        self.add_message("assistant", gpt_response, mode=mode)
 
         return gpt_response

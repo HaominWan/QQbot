@@ -66,7 +66,7 @@ class VectorMemory:
                 return True
         return False
 
-    def store(self, group_id: int, user_id: Optional[int], content: str, role: str) -> None:
+    def store(self, group_id: int, user_id: Optional[int], content: str, role: str, mode: Optional[str] = None) -> None:
         if not self._ready or not content or not content.strip():
             return
         col = self._collection(group_id)
@@ -78,6 +78,7 @@ class VectorMemory:
             metadatas=[{
                 "user_id": str(user_id) if user_id is not None else "",
                 "role": role,
+                "mode": mode or "",
                 "timestamp": int(time.time() * 1000),
             }],
         )
@@ -103,7 +104,7 @@ class VectorMemory:
             print(f"[Memory] Failed to clear group {group_id}: {exc}")
             return False
 
-    def search(self, group_id: int, query: str) -> str:
+    def search(self, group_id: int, query: str, mode: Optional[str] = None) -> str:
         """Return relevant historical messages as a formatted string.
 
         Results are sorted by timestamp so they read chronologically.
@@ -128,6 +129,9 @@ class VectorMemory:
         for meta, doc in pairs:
             uid = meta.get("user_id", "")
             role = meta.get("role", "")
+            memory_mode = meta.get("mode", "")
+            if mode == "guardian" and role == "assistant" and memory_mode != "guardian":
+                continue
             if role == "assistant":
                 lines.append(f"Bot曾回复: {doc}")
             elif uid:

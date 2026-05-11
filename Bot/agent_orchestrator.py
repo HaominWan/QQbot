@@ -97,7 +97,10 @@ class AgentOrchestrator:
 
         persona_prompt = self.persona_engine.prepare(user_id, message_content)
         if persona_prompt.blocked_override:
-            print(f"[Persona] Blocked System Override from group user {user_id}")
+            print(
+                f"[Persona] Blocked override from group user {user_id}: "
+                f"{', '.join(persona_prompt.blocked_reasons)}"
+            )
 
         group = self.session_manager.get_group_session(group_id)
         response = await group.handle_message(
@@ -105,6 +108,7 @@ class AgentOrchestrator:
             persona_prompt.message_content,
             persona_prompt.system_role,
             store_user=False,
+            mode=persona_prompt.mode,
         )
         segments = await self._build_message_segments(response)
         await self.bot_interfaces["send_group_message"](ws, group_id, segments)
@@ -136,7 +140,10 @@ class AgentOrchestrator:
 
         persona_prompt = self.persona_engine.prepare(user_id, message_content)
         if persona_prompt.blocked_override:
-            print(f"[Persona] Blocked System Override from private user {user_id}")
+            print(
+                f"[Persona] Blocked override from private user {user_id}: "
+                f"{', '.join(persona_prompt.blocked_reasons)}"
+            )
         print(f"[Persona] Using {persona_prompt.mode} mode for private user {user_id}")
 
         user_session = self.session_manager.get_private_session(user_id)

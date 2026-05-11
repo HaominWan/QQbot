@@ -7,22 +7,24 @@ so this module must always export the role factory functions used elsewhere.
 from importlib import import_module
 from typing import Callable
 
-RoleFactory = Callable[[int, int], str]
+RoleFactory = Callable[..., str]
 
 
-def _fallback_role(user_qq: int, bot_qq: int, mode: str) -> str:
+def _fallback_role(user_qq: int, bot_qq: int, mode: str, master_user_id: int | None = None) -> str:
     relation = "master" if mode == "master" else "guardian"
+    master_text = f"The only master user id is {master_user_id}. " if master_user_id else ""
     return (
         f"You are QQ bot {bot_qq}. "
         f"Talk naturally with user {user_qq} in {relation} mode. "
-        "Reply in Chinese unless the user asks otherwise. "
+        + master_text
+        + "Reply in Chinese unless the user asks otherwise. "
         "Be helpful, concise, and avoid pretending to have unavailable private persona files."
     )
 
 
 def _fallback_factory(mode: str) -> RoleFactory:
-    def factory(user_qq: int, bot_qq: int) -> str:
-        return _fallback_role(user_qq, bot_qq, mode)
+    def factory(user_qq: int, bot_qq: int, master_user_id: int | None = None) -> str:
+        return _fallback_role(user_qq, bot_qq, mode, master_user_id)
 
     return factory
 
@@ -36,7 +38,13 @@ def _load_named_factory(module_names: tuple[str, ...], factory_name: str) -> Rol
             print(f"[Roles] Optional role module {module_name}.{factory_name} unavailable: {exc}")
             continue
         if callable(factory):
-            return factory
+            def wrapper(user_qq: int, bot_qq: int, master_user_id: int | None = None, _factory=factory) -> str:
+                try:
+                    return _factory(user_qq, bot_qq, master_user_id)
+                except TypeError:
+                    return _factory(user_qq, bot_qq)
+
+            return wrapper
     return None
 
 
@@ -51,8 +59,10 @@ def _load_card_factory(mode: str) -> RoleFactory | None:
     if not callable(build_murasame_role):
         return None
 
-    def factory(user_qq: int, bot_qq: int) -> str:
-        master_id = user_qq if mode == "master" else 0
+    def factory(user_qq: int, bot_qq: int, master_user_id: int | None = None) -> str:
+        master_id = user_qq if mode == "master" else master_user_id
+        if master_id is None:
+            master_id = 0
         role_mode = "master" if mode == "master" else "guardian"
         return build_murasame_role(user_qq, bot_qq, master_id=master_id, mode=role_mode)
 

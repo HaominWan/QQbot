@@ -2,13 +2,18 @@ import roles
 from api import *
 
 class User:
-    def __init__(self, user_id, is_super_user, bot_qq):
+    def __init__(self, user_id, is_super_user, bot_qq, master_user_id=None):
         self.user_id = user_id
         self.is_super_user = is_super_user
+        self.master_user_id = master_user_id
         self.chat_history = [
             {
                 "role": "system",
-                "content": roles.get_Murasame_goshujin_role(user_id,bot_qq) if is_super_user else roles.get_Murasame_customs_role(user_id,bot_qq)
+                "content": (
+                    roles.get_Murasame_goshujin_role(user_id, bot_qq, master_user_id)
+                    if is_super_user
+                    else roles.get_Murasame_customs_role(user_id, bot_qq, master_user_id)
+                )
             }
         ]
 

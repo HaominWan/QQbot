@@ -1,7 +1,7 @@
 from api import transcribe_audio
 from agent_orchestrator import AgentOrchestrator
 from command_handlers import CommandHandler
-from config import TEST_GROUPS, MEMORY_ENABLED, MEMORY_DB_PATH, MEMORY_SEARCH_RESULTS, MEMORY_WINDOW_SIZE
+from config import TEST_GROUPS, MEMORY_ENABLED, MEMORY_DB_PATH, MEMORY_SEARCH_RESULTS, MEMORY_WINDOW_SIZE, SUPER_USERS
 from framework import BotContext, EventRouter, MessageEvent
 from persona_engine import PersonaEngine
 from plugins import analyze_video
@@ -85,6 +85,7 @@ async def handler_init(interfaces):
     persona_engine = PersonaEngine(
         bot_interfaces["bot_qq"],
         bot_interfaces["test_if_super_user"],
+        super_users=bot_interfaces.get("super_users", SUPER_USERS),
     )
 
     memory = None
@@ -101,6 +102,7 @@ async def handler_init(interfaces):
         bot_interfaces["test_if_super_user"],
         memory=memory,
         window_size=MEMORY_WINDOW_SIZE,
+        super_users=bot_interfaces.get("super_users", SUPER_USERS),
     )
     user_sessions = session_manager.private_sessions
     command_handler = CommandHandler(

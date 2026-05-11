@@ -38,8 +38,18 @@ DEEPSEEK_BASE_URL = model_settings.get("deepseek_base_url", "https://api.deepsee
 DEEPSEEK_MODEL = model_settings.get("deepseek_model", "deepseek-v4-flash")
 DEEPSEEK_TEMPERATURE = float(model_settings.get("deepseek_temperature", 0.75))
 
-SUPER_USERS = config_data["bot_settings"]["super_users"]
-TEST_GROUPS = config_data["bot_settings"]["test_groups"]
+def _int_list(values, field_name: str) -> list[int]:
+    normalized = []
+    for value in values:
+        try:
+            normalized.append(int(value))
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"{field_name} contains a non-integer id: {value!r}") from exc
+    return normalized
+
+
+SUPER_USERS = _int_list(config_data["bot_settings"]["super_users"], "super_users")
+TEST_GROUPS = _int_list(config_data["bot_settings"]["test_groups"], "test_groups")
 HOST = config_data["bot_settings"]["host"]
 PORT = config_data["bot_settings"]["port"]
 PROXY_URL = config_data["bot_settings"]["proxy_url"]

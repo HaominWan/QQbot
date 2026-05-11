@@ -36,8 +36,14 @@ startup_notice_sent = False
 
 
 def test_if_super_user(user_id):
-    print(f"[Debug] Checking super user status for {user_id}, super_users list: {super_users}")
-    result = user_id in super_users
+    try:
+        normalized_user_id = int(user_id)
+    except (TypeError, ValueError):
+        print(f"[Debug] Invalid super user id value: {user_id!r}")
+        return False
+
+    print(f"[Debug] Checking super user status for {normalized_user_id}, super_users list: {super_users}")
+    result = normalized_user_id in super_users
     print(f"[Debug] Super user check result: {result}")
     return result
 
@@ -425,6 +431,7 @@ def set_interfaces():
         "encode_message_to_CQ_without_At_self_and_Image": encode_message_to_CQ_without_At_self_and_Image,
         "decode_CQ_to_message": decode_CQ_to_message,
         "test_if_super_user": test_if_super_user,
+        "super_users": tuple(super_users),
         "bot_qq": bot_qq,
         "proxy_url": proxy_url,
         "upload_group_file": upload_group_file,

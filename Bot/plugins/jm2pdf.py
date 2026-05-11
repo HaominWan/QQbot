@@ -3,6 +3,7 @@ import glob
 import html
 import os
 import re
+import unicodedata
 from pathlib import Path
 from typing import Any
 
@@ -13,8 +14,8 @@ _PLUGIN_DIR = Path(__file__).resolve().parent
 _BOT_DIR = _PLUGIN_DIR.parent
 _TMP_DIR = _BOT_DIR / "tmp"
 _RECOMMEND_MARKERS = (
-    r"C\d+\s*(?:(?:&amp;)|&){1,2}\s*推荐本本",
-    r"C\d+\s*(?:(?:&amp;)|&){1,2}\s*推薦本本",
+    r"C\d+\s*(?:(?:&amp;)|(?:&#38;)|(?:&#x26;)|&|＆){1,2}\s*推荐本本",
+    r"C\d+\s*(?:(?:&amp;)|(?:&#38;)|(?:&#x26;)|&|＆){1,2}\s*推薦本本",
 )
 _IGNORE_TEXTS = {
     "更多",
@@ -121,6 +122,25 @@ def _clean_text(text: str) -> str:
     return text
 
 
+def _decode_unicode_escapes(text: str) -> str:
+    def replace(match: re.Match[str]) -> str:
+        return chr(int(match.group(1), 16))
+
+    return re.sub(r"\\u([0-9a-fA-F]{4})", replace, text)
+
+
+def _normalize_marker_text(text: str) -> str:
+    text = html.unescape(_decode_unicode_escapes(text or ""))
+    text = unicodedata.normalize("NFKC", text)
+    text = re.sub(r"\s+", "", text)
+    return text.casefold()
+
+
+def _is_c107_recommend_text(text: str) -> bool:
+    normalized = _normalize_marker_text(text)
+    return re.search(r"c\d+&{1,2}(?:推荐|推薦)本本", normalized) is not None
+
+
 def _valid_title(title: str, album_id: str = "") -> bool:
     title = _clean_title(title)
     if not title or title in _IGNORE_TEXTS:
@@ -216,10 +236,18 @@ def _fetch_home_html_sync() -> str:
     raise RuntimeError("无法获取 JM 首页")
 
 
+def _real_album_count(fragment: str) -> int:
+    return sum(
+        1
+        for album_match in re.finditer(r"/album/(\d+)", fragment, flags=re.I)
+        if _is_real_album_id(album_match.group(1))
+    )
+
+
 def _bounded_section(page_html: str, start: int) -> str:
     search_from = min(len(page_html), start + 20)
     next_section = re.search(
-        r"(?:</section\b[^>]*>|<section\b[^>]*>|<h[1-6]\b[^>]*>|C\d+\s*&&)",
+        r"(?:</section\b[^>]*>|<section\b[^>]*>|<h[1-6]\b[^>]*>|C\d+\s*(?:(?:&amp;)|&|＆){1,2})",
         page_html[search_from:],
         flags=re.I,
     )
@@ -227,16 +255,88 @@ def _bounded_section(page_html: str, start: int) -> str:
     return page_html[start:end]
 
 
+def _html_from_element(element: Any) -> str:
+    try:
+        from lxml import html as lxml_html
+
+        return lxml_html.tostring(element, encoding="unicode", method="html")
+    except Exception:
+        return ""
+
+
+def _next_sibling_section(element: Any) -> str:
+    fragments = [_html_from_element(element)]
+    sibling = element.getnext()
+    while sibling is not None:
+        tag = str(getattr(sibling, "tag", "")).lower()
+        if tag in {"section", "h1", "h2", "h3", "h4", "h5", "h6"}:
+            break
+        fragments.append(_html_from_element(sibling))
+        sibling = sibling.getnext()
+    return "".join(fragments)
+
+
+def _recommend_section_by_dom(page_html: str) -> str:
+    try:
+        from lxml import html as lxml_html
+
+        root = lxml_html.fromstring(page_html)
+    except Exception as exc:
+        print(f"[JM] Failed to parse home page DOM: {exc}")
+        return ""
+
+    candidates: list[tuple[int, str]] = []
+    for element in root.iter():
+        text = element.text_content()
+        if not _is_c107_recommend_text(text):
+            continue
+        if any(_is_c107_recommend_text(child.text_content()) for child in element.iterdescendants()):
+            continue
+
+        tag = str(getattr(element, "tag", "")).lower()
+        fragments = [
+            (0, _next_sibling_section(element)),
+            (0, _html_from_element(element)),
+        ]
+
+        parent = element.getparent()
+        depth = 0
+        while parent is not None and depth < 3:
+            fragments.append((depth + 1, _next_sibling_section(parent)))
+            fragments.append((depth + 1, _html_from_element(parent)))
+            parent = parent.getparent()
+            depth += 1
+
+        for depth, fragment in fragments:
+            count = _real_album_count(fragment)
+            if count <= 0:
+                continue
+            score = (
+                min(count, 20)
+                + (1000 if tag in {"h1", "h2", "h3", "h4", "h5", "h6"} else 0)
+                - (depth * 100)
+                - (len(fragment) // 5000)
+            )
+            candidates.append((score, fragment))
+
+    if not candidates:
+        return ""
+
+    candidates.sort(key=lambda item: item[0], reverse=True)
+    return candidates[0][1]
+
+
 def _recommend_section(page_html: str) -> str:
+    page_html = _decode_unicode_escapes(page_html)
+    dom_section = _recommend_section_by_dom(page_html)
+    if dom_section:
+        return dom_section
+
     candidates: list[tuple[int, int, str]] = []
     for marker in _RECOMMEND_MARKERS:
         for match in re.finditer(marker, page_html, flags=re.I):
             section = _bounded_section(page_html, match.start())
-            real_album_count = sum(
-                1
-                for album_match in re.finditer(r"/album/(\d+)", section, flags=re.I)
-                if _is_real_album_id(album_match.group(1))
-            )
+            real_album_count = _real_album_count(section)
             if real_album_count <= 0:
                 continue
 
@@ -257,7 +357,9 @@ def _recommend_section(page_html: str) -> str:
         candidates.sort(key=lambda item: (item[0], -item[1]), reverse=True)
         return candidates[0][2]
 
-    print("[JM] C107 recommendation section marker not found")
+    nearby_titles = re.findall(r">([^<>]*(?:C107|推荐|推薦)[^<>]*)<", page_html, flags=re.I)
+    preview = " | ".join(_clean_text(title) for title in nearby_titles[:8] if _clean_text(title))
+    print(f"[JM] C107 recommendation section marker not found. nearby titles: {preview or 'none'}")
     return ""
 
 
