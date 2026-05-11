@@ -6,7 +6,6 @@ import re
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import urlparse
 
 import httpx
 
@@ -38,6 +37,7 @@ class PixivQuery:
     raw: str
     keyword: str
     count: int
+    mode: str = "character"
     exact_id: int | None = None
 
 
@@ -86,9 +86,23 @@ def _parse_query(message: str) -> PixivQuery:
     keyword = re.sub(r"\s+", " ", keyword)
     count = max(1, min(count, PIXIV_MAX_COUNT))
 
+    mode = "character"
+    mode_match = re.match(
+        r"^(drawer|artist|user|画师|作者|character|char|tag|角色|人物)\s*[:：]\s*(.+)$",
+        keyword,
+        flags=re.I,
+    )
+    if mode_match:
+        mode_name = mode_match.group(1).lower()
+        keyword = mode_match.group(2).strip()
+        if mode_name in {"drawer", "artist", "user", "画师", "作者"}:
+            mode = "drawer"
+        else:
+            mode = "character"
+
     id_match = re.search(r"(?:pid|id|illust_id)?[:：#]?\s*(\d{5,12})$", keyword, flags=re.I)
     exact_id = int(id_match.group(1)) if id_match and keyword == id_match.group(0).strip() else None
-    return PixivQuery(raw=raw, keyword=keyword, count=count, exact_id=exact_id)
+    return PixivQuery(raw=raw, keyword=keyword, count=count, mode=mode, exact_id=exact_id)
 
 
 def _require_pixiv_client():
@@ -136,7 +150,7 @@ def _fetch_search_sync(keyword: str, pages: int = 4) -> list[dict[str, Any]]:
     api = _require_pixiv_client()
     illusts: list[dict[str, Any]] = []
 
-    for target in ("partial_match_for_tags", "title_and_caption"):
+    for target in ("exact_match_for_tags", "partial_match_for_tags", "title_and_caption"):
         payload = api.search_illust(keyword, search_target=target, sort="date_desc")
         for _ in range(max(1, pages // 2)):
             illusts.extend(_to_illusts(payload))
@@ -145,6 +159,12 @@ def _fetch_search_sync(keyword: str, pages: int = 4) -> list[dict[str, Any]]:
                 break
             payload = api.search_illust(**api.parse_qs(next_url))
 
+    return _dedupe_illusts(illusts)
+
+
+def _fetch_drawer_sync(keyword: str) -> list[dict[str, Any]]:
+    api = _require_pixiv_client()
+    illusts: list[dict[str, Any]] = []
     user_payload = _json_dict(api.search_user(keyword))
     for preview in _json_list(user_payload.get("user_previews"))[:3]:
         preview = _json_dict(preview)
@@ -321,29 +341,36 @@ async def _build_response(illusts: list[dict[str, Any]]) -> list[dict[str, Any]]
 async def handle_pixiv_message(message: str) -> list[dict[str, Any]]:
     query = _parse_query(message)
     if not query.keyword:
-        return [_text_seg("请输入 PID、作者/作品名或 tag，例如：.pixiv 初音ミク -n 2")]
+        return [_text_seg("请输入 PID、角色/tag 或画师名，例如：.pixiv character:斯卡蒂 -n 2 / .pixiv drawer:画师名")]
 
     parts = query.keyword.split(maxsplit=1)
     subcommand = parts[0].lower() if parts else ""
     if subcommand in {"recommend", "rec", "daily", "ranking"}:
-        return await handle_recommend_message(parts[1] if len(parts) > 1 else "")
+        return await handle_recommend_message(
+            parts[1] if len(parts) > 1 else "",
+            count=query.count,
+        )
 
     try:
         if query.exact_id is not None:
             fetched = await asyncio.to_thread(_fetch_detail_sync, query.exact_id)
             selected = _select_illusts(fetched, f"pid:{query.exact_id}", query.count)
+        elif query.mode == "drawer":
+            fetched = await asyncio.to_thread(_fetch_drawer_sync, query.keyword)
+            selected = _select_illusts(fetched, f"drawer:{query.keyword.lower()}", query.count)
         else:
             fetched = await asyncio.to_thread(_fetch_search_sync, query.keyword)
-            selected = _select_illusts(fetched, query.keyword.lower(), query.count)
+            selected = _select_illusts(fetched, f"character:{query.keyword.lower()}", query.count)
         return await _build_response(selected)
     except Exception as exc:
         print(f"[Pixiv] Query failed: {exc}")
         return [_text_seg(f"[Pixiv] 查询失败：{exc}")]
 
 
-async def handle_recommend_message(message: str = "") -> list[dict[str, Any]]:
-    query = _parse_query(message)
-    count = query.count
+async def handle_recommend_message(message: str = "", count: int | None = None) -> list[dict[str, Any]]:
+    if count is None:
+        query = _parse_query(message)
+        count = query.count
 
     try:
         fetched = await asyncio.to_thread(_fetch_ranking_sync)

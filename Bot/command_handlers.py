@@ -48,6 +48,7 @@ class CommandHandler:
         self.group_plugin_bans = GroupPluginBanStore(_BOT_DIR / "data" / "group_plugin_bans.json")
         self.help_message = """========================
 .help              查看此帮助
+.help <插件名>     查看插件语法
 .reset             重启 Bot            ★
 .stop              强制停止 Bot        ★
 .clean             清空当前群记忆      ★
@@ -63,6 +64,35 @@ class CommandHandler:
 .pixiv             Pixiv 搜图
 ========================
 ★ 超级用户专属指令"""
+        self.plugin_help_messages = {
+            "pixiv": """Pixiv 插件语法
+
+.pixiv <关键词> [-n 数量]
+按角色/tag/标题搜索，默认返回 1 张，数量上限由 pixiv_settings.max_count 控制。
+示例：.pixiv 斯卡蒂
+示例：.pixiv character:斯卡蒂 -n 2
+
+.pixiv drawer:<画师名> [-n 数量]
+按画师搜索作品。
+示例：.pixiv drawer:toi8
+
+.pixiv <PID>
+按作品 PID 直接获取。
+示例：.pixiv 12345678
+
+.pixiv recommend [-n 数量]
+从 Pixiv 日榜里随机推荐高质量图。
+示例：.pixiv recommend -n 2""",
+            "jm": """JM 插件语法
+
+.jm <编号>
+下载指定 JM 本子并生成 PDF。
+示例：.jm 123456
+
+.jm recommend [数量]
+获取今日 JM 推荐栏编号，默认 10 个、最多 20 个。
+示例：.jm recommend 5""",
+        }
         self._register_tools()
 
     def _register_tools(self):
@@ -249,11 +279,29 @@ class CommandHandler:
             await self.bot_interfaces["decode_CQ_to_message"](text),
         )
 
+    def _get_help_message(self, message_content: str) -> str:
+        topic = self.extract_command_content(message_content, CommandType.HELP).strip()
+        if not topic:
+            return self.help_message
+
+        topic_key = topic.lstrip(".").lower()
+        help_message = self.plugin_help_messages.get(topic_key)
+        if help_message:
+            return help_message
+
+        tool = self.tool_router.find_tool(topic_key)
+        if tool:
+            aliases = " / ".join(tool.prefixes)
+            return f"{tool.name} 插件\n指令：{aliases}\n说明：{tool.description}\n暂无更详细语法。"
+
+        available = "、".join(sorted(self.plugin_help_messages))
+        return f"未找到 {topic} 的帮助。可用专题：{available}"
+
     async def _handle_help_group(self, ws, message_content: str, group_id: int, **kwargs):
-        await self._send_group_text(ws, group_id, self.help_message)
+        await self._send_group_text(ws, group_id, self._get_help_message(message_content))
 
     async def _handle_help_private(self, ws, message_content: str, user_id: int, **kwargs):
-        await self._send_private_text(ws, user_id, self.help_message)
+        await self._send_private_text(ws, user_id, self._get_help_message(message_content))
 
     async def _handle_reset_group(
         self,
@@ -554,15 +602,22 @@ class CommandHandler:
         return 10
 
     @staticmethod
-    def _format_jm_recommendations(recommendations: list[dict[str, str]]) -> str:
+    def _format_jm_recommendations(recommendations: list[dict]) -> str:
         if not recommendations:
-            return "今日 JM 推荐栏暂时没有解析到本子编号"
+            return "没有解析到 C107&&推荐本本 栏目的 JM 编号"
 
-        lines = ["今日 JM 推荐栏："]
+        lines = ["C107&&推荐本本："]
         for index, item in enumerate(recommendations, start=1):
             title = item.get("title") or "未命名"
             album_id = item.get("id") or "未知"
             lines.append(f"{index}. JM{album_id} - {title}")
+            tags = item.get("tags") or []
+            if isinstance(tags, str):
+                tags_text = tags
+            else:
+                tags_text = " / ".join(str(tag) for tag in tags[:8])
+            if tags_text:
+                lines.append(f"   Tags：{tags_text}")
         lines.append("发送 .jm <编号> 可下载对应 PDF")
         return "\n".join(lines)
 

@@ -183,6 +183,7 @@ python bot.py
 | 指令 | 说明 | 权限 |
 |------|------|------|
 | `.help` | 显示帮助 | 所有人 |
+| `.help <插件名>` | 显示指定插件语法，如 `.help pixiv` | 所有人 |
 | `.reset` | 重启 Bot 进程（同时重启 NapCat 如未运行） | ★ |
 | `.stop` | 强制停止 Bot 与 NapCat | ★ |
 | `.clean` | 清空当前群的向量记忆数据库 | ★ |
@@ -195,7 +196,8 @@ python bot.py
 | `.P5 <内容>` | P5 风格预告信 | 所有人 |
 | `.jm <编号>` | 下载 JMComic 并转 PDF | 🔧 |
 | `.jm recommend [数量]` | 获取今日 JM 推荐栏本子编号，默认 10 个、最多 20 个 | 所有人 |
-| `.pixiv <PID/tag/关键词> [-n 1-3]` | Pixiv 搜图，按质量评分后随机返回 | 所有人 |
+| `.pixiv <PID/tag/关键词> [-n 1-3]` | Pixiv 搜图，默认按角色/tag/标题搜索 | 所有人 |
+| `.pixiv drawer:<画师名> [-n 1-3]` | Pixiv 按画师搜索作品 | 所有人 |
 | `.pixiv recommend [-n 1-3]` | Pixiv 每日推荐，随机返回排行榜高质量图 | 所有人 |
 
 ## 项目结构
