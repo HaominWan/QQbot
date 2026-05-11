@@ -7,7 +7,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Optional
 
-from plugins import P5_card, YGO_find_card, drawing, jm2pdf, markdown, typst_renderer
+from plugins import P5_card, YGO_find_card, drawing, jm2pdf, markdown, pixiv, typst_renderer
 from tool_router import Tool, ToolRouter, ToolScope
 
 _BOT_DIR = Path(__file__).resolve().parent
@@ -26,6 +26,7 @@ class CommandType(Enum):
     YGO = "YGO"
     P5 = "P5"
     JM = "jm"
+    PIXIV = "pixiv"
 
 
 class MessageType(Enum):
@@ -52,6 +53,7 @@ class CommandHandler:
 .YGO               查询游戏王卡片
 .P5                生成 P5 预告信
 .jm                下载 JM 并生成 PDF
+.pixiv             Pixiv 搜图
 ========================
 ★ 超级用户专属指令"""
         self._register_tools()
@@ -138,6 +140,14 @@ class CommandHandler:
                     group_handler=self._handle_jm_group,
                     private_handler=self._handle_jm_private,
                     description="下载 JM 并生成 PDF",
+                ),
+                Tool(
+                    name="pixiv",
+                    command_type=CommandType.PIXIV,
+                    prefixes=[".pixiv", ".pid"],
+                    group_handler=self._handle_pixiv_group,
+                    private_handler=self._handle_pixiv_private,
+                    description="Pixiv 搜图",
                 ),
             ]
         )
@@ -396,6 +406,16 @@ class CommandHandler:
             await self._send_private_text(ws, user_id, "Get Da★Ze☆~ 少🦌一点哦，发过去了，好好欣赏哦")
         finally:
             self._cleanup_jm_tmp(jm_pdf, command_content)
+
+    async def _handle_pixiv_group(self, ws, message_content: str, group_id: int, **kwargs):
+        command_content = self.extract_command_content(message_content, CommandType.PIXIV)
+        pixiv_result = await pixiv.handle_pixiv_message(command_content)
+        await self.bot_interfaces["send_group_message"](ws, group_id, pixiv_result)
+
+    async def _handle_pixiv_private(self, ws, message_content: str, user_id: int, **kwargs):
+        command_content = self.extract_command_content(message_content, CommandType.PIXIV)
+        pixiv_result = await pixiv.handle_pixiv_message(command_content)
+        await self.bot_interfaces["send_private_message"](ws, user_id, pixiv_result)
 
     def _cleanup_jm_tmp(self, jm_pdf: str, command_content: str):
         if jm_pdf and os.path.exists(jm_pdf):

@@ -6,7 +6,8 @@
     "groq": "YOUR_GROQ_API_KEY",
     "openai": "YOUR_OPENAI_API_KEY",
     "prodia": "YOUR_PRODIA_API_KEY",
-    "hf_token": ""
+    "hf_token": "",
+    "pixiv_refresh_token": ""
   },
   "model_settings": {
     "deepseek_base_url": "https://api.deepseek.com",
@@ -27,5 +28,13 @@
     "search_results": 3,
     "context_max_chars": 1500,
     "context_placement": "user_message"
+  },
+  "pixiv_settings": {
+    "min_bookmarks": 100,
+    "sample_pool": 80,
+    "default_count": 1,
+    "max_count": 3,
+    "allow_r18": false,
+    "allow_ai": false
   }
 }

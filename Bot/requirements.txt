@@ -22,3 +22,4 @@ latex
 chromadb
 sentence-transformers
 huggingface_hub
+pixivpy3

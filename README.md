@@ -19,6 +19,7 @@
 | 游戏王查卡 | 查询游戏王卡片信息与图片 |
 | P5 预告信 | 生成女神异闻录 5 风格预告信 |
 | AI 绘图 | 调用 HuggingFace FLUX.1-schnell 生成图片 |
+| Pixiv 搜图 | 按 PID、作品/作者名或 tag 随机返回高质量图片 |
 | JMComic | 漫画下载并转 PDF（维修中） |
 
 ## 部署
@@ -79,7 +80,8 @@ npm install markdown-it markdown-it-texmath katex puppeteer
     "groq":       "gsk_...",
     "openai":     "",
     "prodia":     "",
-    "hf_token":   ""
+    "hf_token":   "",
+    "pixiv_refresh_token": ""
   },
   "model_settings": {
     "deepseek_base_url":    "https://api.deepseek.com",
@@ -100,6 +102,14 @@ npm install markdown-it markdown-it-texmath katex puppeteer
     "search_results":     3,
     "context_max_chars":  1500,
     "context_placement":  "user_message"
+  },
+  "pixiv_settings": {
+    "min_bookmarks": 100,
+    "sample_pool": 80,
+    "default_count": 1,
+    "max_count": 3,
+    "allow_r18": false,
+    "allow_ai": false
   }
 }
 ```
@@ -112,6 +122,7 @@ npm install markdown-it markdown-it-texmath katex puppeteer
 | `gemini` | 视频分析（google-genai） | 推荐填写 |
 | `groq` | 语音转文字（Whisper） | 可选 |
 | `hf_token` | HuggingFace Token，图片识别与 AI 绘图必填（免费账号即可） | 必填 |
+| `pixiv_refresh_token` | Pixiv 登录 refresh token，用于 Pixiv 搜图/推荐 | Pixiv 功能必填 |
 | `prodia` | 已弃用 | — |
 | `super_users` | 主人 QQ 号列表，拥有管理指令权限 | 必填 |
 | `test_groups` | 允许 Bot 响应的群号列表 | 必填 |
@@ -181,6 +192,8 @@ python bot.py
 | `.YGO <卡名>` | 游戏王查卡 | 所有人 |
 | `.P5 <内容>` | P5 风格预告信 | 所有人 |
 | `.jm <编号>` | 下载 JMComic 并转 PDF | 🔧 |
+| `.pixiv <PID/tag/关键词> [-n 1-3]` | Pixiv 搜图，按质量评分后随机返回 | 所有人 |
+| `.pixiv recommend [-n 1-3]` | Pixiv 每日推荐，随机返回排行榜高质量图 | 所有人 |
 
 ## 项目结构
 
