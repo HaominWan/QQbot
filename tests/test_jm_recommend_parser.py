@@ -1,0 +1,100 @@
+import importlib.util
+import sys
+import types
+import unittest
+from pathlib import Path
+
+
+BOT_DIR = Path(__file__).resolve().parents[1] / "Bot"
+
+
+def load_jm2pdf():
+    sys.modules.setdefault("jmcomic", types.SimpleNamespace())
+    pil_module = types.ModuleType("PIL")
+    image_module = types.ModuleType("PIL.Image")
+    pil_module.Image = image_module
+    sys.modules.setdefault("PIL", pil_module)
+    sys.modules.setdefault("PIL.Image", image_module)
+    module_path = BOT_DIR / "plugins" / "jm2pdf.py"
+    spec = importlib.util.spec_from_file_location("jm2pdf_under_test", module_path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
+JM_HOME_RECOMMEND_HTML = """
+<div class="col-lg-12 col-md-12">
+  <div class="row">
+    <div class="pull-left">
+      <h4 class="talk-title"><span class="p-r-15">C107&推薦本本</span></h4>
+    </div>
+    <div class="pull-right m-t-10">
+      <a class="talk-more-btn" href="/promotes/29">看更多</a>
+    </div>
+  </div>
+  <div class="row m-b-10">
+    <ul class="owl-carousel owl-comic-block">
+      <div class="p-b-15 p-l-5 p-r-5">
+        <div class="thumb-overlay-albums">
+          <a href="/album/1437829/禁漫漢化組-c107-のりんこ-先生と明日香-中国翻訳">
+            <img data-src="https://cdn.example/1437829_3x4.jpg"
+                 title="[禁漫漢化組](C107)[のりんこ]先生と明日香[中国翻訳]"
+                 alt="[禁漫漢化組](C107)[のりんこ]先生と明日香[中国翻訳]" />
+          </a>
+          <div class="category-icon">
+            <div class="label-category">同人</div>
+            <div class="label-sub">漢化</div>
+          </div>
+        </div>
+        <span class="video-title title-truncate-index">[禁漫漢化組](C107)[のりんこ]先生と明日香[中国翻訳]</span>
+      </div>
+      <div class="p-b-15 p-l-5 p-r-5">
+        <div class="thumb-overlay-albums">
+          <a href="/album/1437530/禁漫漢化組-c107-ennui-のこっぱ-山の神は淫乱お狐様-中国翻訳">
+            <img title="[禁漫漢化組](C107)[ENNUI(のこっぱ)]山の神は淫乱お狐様[中国翻訳]"
+                 alt="[禁漫漢化組](C107)[ENNUI(のこっぱ)]山の神は淫乱お狐様[中国翻訳]" />
+          </a>
+        </div>
+        <span class="video-title title-truncate-index">[禁漫漢化組](C107)[ENNUI(のこっぱ)]山の神は淫乱お狐様[中国翻訳]</span>
+      </div>
+    </ul>
+  </div>
+</div>
+<div class="col-lg-12 col-md-12">
+  <div class="row">
+    <h4 class="talk-title"><span>禁漫去碼&全彩化</span></h4>
+  </div>
+  <div class="row m-b-10">
+    <a href="/album/1435728/other"><img title="Other title" /></a>
+  </div>
+</div>
+"""
+
+
+class JmRecommendParserTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.jm2pdf = load_jm2pdf()
+
+    def test_parses_homepage_c107_recommendation_row(self):
+        albums = self.jm2pdf._parse_album_links(JM_HOME_RECOMMEND_HTML, 10)
+
+        self.assertEqual([album["id"] for album in albums], ["1437829", "1437530"])
+        self.assertIn("先生と明日香", albums[0]["title"])
+        self.assertNotIn("1435728", [album["id"] for album in albums])
+
+    def test_regex_fallback_accepts_double_ampersand_simplified_marker(self):
+        original_dom_parser = self.jm2pdf._recommend_section_by_dom
+        self.jm2pdf._recommend_section_by_dom = lambda _html: ""
+        try:
+            html = JM_HOME_RECOMMEND_HTML.replace("C107&推薦本本", "C108&&推荐本本")
+            albums = self.jm2pdf._parse_album_links(html, 1)
+        finally:
+            self.jm2pdf._recommend_section_by_dom = original_dom_parser
+
+        self.assertEqual([album["id"] for album in albums], ["1437829"])
+
+
+if __name__ == "__main__":
+    unittest.main()

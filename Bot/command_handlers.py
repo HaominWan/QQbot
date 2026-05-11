@@ -669,9 +669,9 @@ class CommandHandler:
     @staticmethod
     def _format_jm_recommendations(recommendations: list[dict]) -> str:
         if not recommendations:
-            return "没有解析到 C107&推薦本本 栏目的 JM 编号"
+            return "没有解析到 Cxxx&推薦本本 栏目的 JM 编号"
 
-        lines = ["C107&推薦本本："]
+        lines = ["Cxxx&推薦本本："]
         for index, item in enumerate(recommendations, start=1):
             title = item.get("title") or "未命名"
             album_id = item.get("id") or "未知"

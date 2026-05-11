@@ -17,6 +17,7 @@ _RECOMMEND_MARKERS = (
     r"C\d+\s*(?:(?:&amp;)|(?:&#38;)|(?:&#x26;)|&|＆){1,2}\s*推荐本本",
     r"C\d+\s*(?:(?:&amp;)|(?:&#38;)|(?:&#x26;)|&|＆){1,2}\s*推薦本本",
 )
+_HEADING_TAGS = {"h1", "h2", "h3", "h4", "h5", "h6"}
 _IGNORE_TEXTS = {
     "更多",
     "更多...",
@@ -269,11 +270,50 @@ def _next_sibling_section(element: Any) -> str:
     sibling = element.getnext()
     while sibling is not None:
         tag = str(getattr(sibling, "tag", "")).lower()
-        if tag in {"section", "h1", "h2", "h3", "h4", "h5", "h6"}:
+        if tag in {"section", *_HEADING_TAGS}:
             break
         fragments.append(_html_from_element(sibling))
         sibling = sibling.getnext()
     return "".join(fragments)
+
+
+def _classes_of(element: Any) -> set[str]:
+    classes = element.get("class", "") if hasattr(element, "get") else ""
+    return {class_name.strip().lower() for class_name in str(classes).split() if class_name.strip()}
+
+
+def _looks_like_heading_container(element: Any) -> bool:
+    tag = str(getattr(element, "tag", "")).lower()
+    classes = _classes_of(element)
+    if tag in _HEADING_TAGS or "talk-title" in classes:
+        return True
+    return bool(element.xpath(".//*[contains(concat(' ', normalize-space(@class), ' '), ' talk-title ')]"))
+
+
+def _row_following_heading_section(element: Any) -> str:
+    """Homepage recommendation blocks are a heading row followed by an album row."""
+    current = element
+    depth = 0
+    while current is not None and depth < 8:
+        tag = str(getattr(current, "tag", "")).lower()
+        classes = _classes_of(current)
+        if tag == "div" and "row" in classes and _looks_like_heading_container(current):
+            fragments = [_html_from_element(current)]
+            sibling = current.getnext()
+            while sibling is not None and len(fragments) < 5:
+                if _looks_like_heading_container(sibling) and _real_album_count("".join(fragments)) > 0:
+                    break
+                fragments.append(_html_from_element(sibling))
+                if _real_album_count("".join(fragments)) > 0:
+                    break
+                sibling = sibling.getnext()
+
+            fragment = "".join(fragments)
+            if _real_album_count(fragment) > 0:
+                return fragment
+        current = current.getparent()
+        depth += 1
+    return ""
 
 
 def _recommend_section_by_dom(page_html: str) -> str:
@@ -295,6 +335,7 @@ def _recommend_section_by_dom(page_html: str) -> str:
 
         tag = str(getattr(element, "tag", "")).lower()
         fragments = [
+            (-5, _row_following_heading_section(element)),
             (0, _next_sibling_section(element)),
             (0, _html_from_element(element)),
         ]
@@ -313,7 +354,7 @@ def _recommend_section_by_dom(page_html: str) -> str:
                 continue
             score = (
                 min(count, 20)
-                + (1000 if tag in {"h1", "h2", "h3", "h4", "h5", "h6"} else 0)
+                + (1000 if tag in _HEADING_TAGS else 0)
                 - (depth * 100)
                 - (len(fragment) // 5000)
             )
