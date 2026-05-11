@@ -54,6 +54,18 @@ class VectorMemory:
             metadata={"hnsw:space": "cosine"},
         )
 
+    def _collection_exists(self, name: str) -> bool:
+        try:
+            collections = self._client.list_collections()
+        except Exception:
+            return True
+
+        for collection in collections:
+            collection_name = getattr(collection, "name", collection)
+            if collection_name == name:
+                return True
+        return False
+
     def store(self, group_id: int, user_id: Optional[int], content: str, role: str) -> None:
         if not self._ready or not content or not content.strip():
             return
@@ -74,10 +86,20 @@ class VectorMemory:
         """Delete all stored messages for a group. Returns False if not ready."""
         if not self._ready:
             return False
+        collection_name = f"group_{group_id}"
         try:
-            self._client.delete_collection(f"group_{group_id}")
+            if not self._collection_exists(collection_name):
+                print(f"[Memory] Group {group_id} collection already empty")
+                return True
+
+            before_count = self._client.get_collection(name=collection_name).count()
+            self._client.delete_collection(name=collection_name)
+            print(f"[Memory] Cleared group {group_id} vector memory ({before_count} records)")
             return True
         except Exception as exc:
+            if "does not exist" in str(exc).lower() or "not found" in str(exc).lower():
+                print(f"[Memory] Group {group_id} collection already empty")
+                return True
             print(f"[Memory] Failed to clear group {group_id}: {exc}")
             return False
 

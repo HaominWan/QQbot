@@ -87,3 +87,66 @@ class GroupPluginBanStore:
             data.pop(group_key, None)
         self._save(data)
         return True
+
+
+class UserBanStore:
+    """Persists users the bot should ignore globally."""
+
+    def __init__(self, path: Path):
+        self.path = path
+
+    @staticmethod
+    def _user_key(user_id: int | str) -> str:
+        return str(user_id).strip()
+
+    def _load(self) -> list[str]:
+        if not self.path.exists():
+            return []
+
+        try:
+            with self.path.open("r", encoding="utf-8") as f:
+                data: Any = json.load(f)
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"[PluginState] Failed to read {self.path}: {exc}")
+            return []
+
+        if isinstance(data, dict):
+            users = data.get("users", [])
+        else:
+            users = data
+
+        if not isinstance(users, list):
+            return []
+
+        return sorted({self._user_key(user) for user in users if self._user_key(user)})
+
+    def _save(self, users: list[str]) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = self.path.with_suffix(f"{self.path.suffix}.tmp")
+        with tmp_path.open("w", encoding="utf-8") as f:
+            json.dump({"users": sorted(users)}, f, ensure_ascii=False, indent=2)
+            f.write("\n")
+        os.replace(tmp_path, self.path)
+
+    def is_banned(self, user_id: int | str) -> bool:
+        return self._user_key(user_id) in self._load()
+
+    def ban(self, user_id: int | str) -> bool:
+        user_key = self._user_key(user_id)
+        users = set(self._load())
+        if not user_key or user_key in users:
+            return False
+
+        users.add(user_key)
+        self._save(sorted(users))
+        return True
+
+    def unban(self, user_id: int | str) -> bool:
+        user_key = self._user_key(user_id)
+        users = set(self._load())
+        if user_key not in users:
+            return False
+
+        users.remove(user_key)
+        self._save(sorted(users))
+        return True

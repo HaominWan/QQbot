@@ -65,6 +65,10 @@ class AgentOrchestrator:
         segments = payload.get("message", [])
         message_content = await self.bot_interfaces["encode_message_to_CQ"](segments)
 
+        if self._is_blocked_user(user_id):
+            print(f"[Agent] ignored banned group user {user_id}")
+            return AgentRunResult(False, AgentAction.IGNORE, "user is banned")
+
         # Store every group message so the bot can recall group history later.
         memory = self.session_manager.memory
         if memory:
@@ -110,6 +114,10 @@ class AgentOrchestrator:
         user_id = int(payload["user_id"])
         segments = payload.get("message", [])
         message_content = await self.bot_interfaces["encode_message_to_CQ"](segments)
+
+        if self._is_blocked_user(user_id):
+            print(f"[Agent] ignored banned private user {user_id}")
+            return AgentRunResult(False, AgentAction.IGNORE, "user is banned")
 
         decision = self.decide_private(message_content)
         print(f"[Agent] private decision={decision.action.value} reason={decision.reason}")
@@ -196,6 +204,11 @@ class AgentOrchestrator:
         if command_type:
             return AgentDecision(AgentAction.TOOL, "matched explicit command", command_type)
         return AgentDecision(AgentAction.CHAT, "private message")
+
+    def _is_blocked_user(self, user_id: int) -> bool:
+        if self.bot_interfaces["test_if_super_user"](user_id):
+            return False
+        return self.command_handler.is_user_banned(user_id)
 
     async def _with_reply_context(self, ws, segments: list, message_content: str) -> str:
         reply_id = self._reply_id(segments)

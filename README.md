@@ -186,9 +186,11 @@ python bot.py
 | `.help <插件名>` | 显示指定插件语法，如 `.help pixiv` | 所有人 |
 | `.reset` | 重启 Bot 进程（同时重启 NapCat 如未运行） | ★ |
 | `.stop` | 强制停止 Bot 与 NapCat | ★ |
-| `.clean` | 清空当前群的向量记忆数据库 | ★ |
+| `.clean` | 清空当前群的向量记忆数据库和当前对话上下文 | ★ |
 | `.ban <插件名>` | 在当前群禁用可管理插件，例如 `.ban jm` | ★ |
 | `.unban <插件名>` | 在当前群重新启用插件，例如 `.unban jm` | ★ |
+| `.ban user:<QQ号>` | 禁止 Bot 回复指定用户（群聊和私聊均生效） | ★ |
+| `.unban user:<QQ号>` | 解除指定用户的回复封禁 | ★ |
 | `.draw <提示词>` | AI 绘图（HuggingFace FLUX） | 所有人 |
 | `.typ <代码>` | 渲染 Typst 代码为图片 | 所有人 |
 | `.md <文本>` | 渲染 Markdown 为图片 | 所有人 |

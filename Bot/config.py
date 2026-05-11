@@ -2,7 +2,14 @@ import json
 import os
 
 # Load configuration from config.json
-config_path = os.path.join(os.path.dirname(__file__), 'config.json')
+config_dir = os.path.dirname(__file__)
+config_path = os.path.join(config_dir, 'config.json')
+
+
+def _resolve_config_path(path: str) -> str:
+    if os.path.isabs(path):
+        return path
+    return os.path.abspath(os.path.join(config_dir, path))
 
 if os.path.exists(config_path):
     with open(config_path, 'r', encoding='utf-8-sig') as f:
@@ -39,7 +46,7 @@ PROXY_URL = config_data["bot_settings"]["proxy_url"]
 
 _memory = config_data.get("memory_settings", {})
 MEMORY_ENABLED = _memory.get("enabled", True)
-MEMORY_DB_PATH = _memory.get("db_path", "./memory_db")
+MEMORY_DB_PATH = _resolve_config_path(_memory.get("db_path", "./memory_db"))
 MEMORY_WINDOW_SIZE = int(_memory.get("window_size", 30))
 MEMORY_SEARCH_RESULTS = int(_memory.get("search_results", 3))
 MEMORY_CONTEXT_MAX_CHARS = int(_memory.get("context_max_chars", 1500))

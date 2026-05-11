@@ -1,5 +1,6 @@
 import asyncio
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -8,12 +9,13 @@ from pathlib import Path
 from typing import Optional
 
 from plugins import P5_card, YGO_find_card, drawing, jm2pdf, markdown, pixiv, typst_renderer
-from plugin_state import GroupPluginBanStore
+from plugin_state import GroupPluginBanStore, UserBanStore
 from tool_router import Tool, ToolRouter, ToolScope
 
 _BOT_DIR = Path(__file__).resolve().parent
 _ROOT_DIR = _BOT_DIR.parent
 _WINDOWS_RESTART_SCRIPT = _ROOT_DIR / "run.bat"
+_USER_BAN_RE = re.compile(r"^(?:user|qq)\s*[:：]?\s*(?:\[CQ:at,qq=)?(\d+)", re.I)
 
 
 class CommandType(Enum):
@@ -46,6 +48,7 @@ class CommandHandler:
         self.session_manager = session_manager
         self.tool_router = ToolRouter()
         self.group_plugin_bans = GroupPluginBanStore(_BOT_DIR / "data" / "group_plugin_bans.json")
+        self.user_bans = UserBanStore(_BOT_DIR / "data" / "banned_users.json")
         self.help_message = """========================
 .help              查看此帮助
 .help <插件名>     查看插件语法
@@ -54,6 +57,8 @@ class CommandHandler:
 .clean             清空当前群记忆      ★
 .ban <插件名>      禁用本群插件        ★
 .unban <插件名>    启用本群插件        ★
+.ban user:<QQ号>   禁止 Bot 回复该用户 ★
+.unban user:<QQ号> 解除用户回复封禁    ★
 .draw              AI 绘图
 .typ / .typst      Typst 渲染
 .md / .markdown    Markdown 渲染
@@ -222,6 +227,9 @@ class CommandHandler:
 
     def extract_command_content(self, message_content: str, command_type: CommandType) -> str:
         return self.tool_router.extract_content(message_content, command_type)
+
+    def is_user_banned(self, user_id: int | str) -> bool:
+        return self.user_bans.is_banned(user_id)
 
     async def handle_command(
         self,
@@ -403,7 +411,9 @@ class CommandHandler:
             await self._send_group_text(ws, group_id, "向量记忆未启用")
             return
         if memory.clear(group_id):
-            await self._send_group_text(ws, group_id, "已清空本群的向量记忆")
+            if self.session_manager:
+                self.session_manager.reset_group_session(group_id)
+            await self._send_group_text(ws, group_id, "已清空本群的向量记忆和当前对话上下文")
         else:
             await self._send_group_text(ws, group_id, "清空失败，记忆模块尚未就绪")
 
@@ -419,6 +429,13 @@ class CommandHandler:
             return None
         return tool
 
+    @staticmethod
+    def _parse_user_ban_target(raw_content: str) -> Optional[int]:
+        match = _USER_BAN_RE.match(raw_content.strip())
+        if not match:
+            return None
+        return int(match.group(1))
+
     async def _handle_ban_group(
         self,
         ws,
@@ -432,9 +449,22 @@ class CommandHandler:
             return
 
         raw_name = self.extract_command_content(message_content, CommandType.BAN)
+        banned_user_id = self._parse_user_ban_target(raw_name)
+        if banned_user_id is not None:
+            if self.bot_interfaces["test_if_super_user"](banned_user_id):
+                await self._send_group_text(ws, group_id, "不能封禁超级用户，避免管理入口被锁住")
+                return
+
+            changed = self.user_bans.ban(banned_user_id)
+            if changed:
+                await self._send_group_text(ws, group_id, f"已禁止 Bot 回复用户 {banned_user_id}")
+            else:
+                await self._send_group_text(ws, group_id, f"用户 {banned_user_id} 已在回复封禁列表中")
+            return
+
         tool = self._resolve_manageable_tool(raw_name)
         if tool is None:
-            await self._send_group_text(ws, group_id, f"请输入可管理插件名：{self._manageable_tool_names()}")
+            await self._send_group_text(ws, group_id, f"请输入可管理插件名：{self._manageable_tool_names()}，或使用 .ban user:<QQ号>")
             return
 
         changed = self.group_plugin_bans.ban(group_id, tool.name)
@@ -456,9 +486,18 @@ class CommandHandler:
             return
 
         raw_name = self.extract_command_content(message_content, CommandType.UNBAN)
+        banned_user_id = self._parse_user_ban_target(raw_name)
+        if banned_user_id is not None:
+            changed = self.user_bans.unban(banned_user_id)
+            if changed:
+                await self._send_group_text(ws, group_id, f"已允许 Bot 回复用户 {banned_user_id}")
+            else:
+                await self._send_group_text(ws, group_id, f"用户 {banned_user_id} 本来就不在回复封禁列表中")
+            return
+
         tool = self._resolve_manageable_tool(raw_name)
         if tool is None:
-            await self._send_group_text(ws, group_id, f"请输入可管理插件名：{self._manageable_tool_names()}")
+            await self._send_group_text(ws, group_id, f"请输入可管理插件名：{self._manageable_tool_names()}，或使用 .unban user:<QQ号>")
             return
 
         changed = self.group_plugin_bans.unban(group_id, tool.name)
@@ -471,13 +510,39 @@ class CommandHandler:
         if not self.bot_interfaces["test_if_super_user"](user_id):
             await self._send_private_text(ws, user_id, "权限不足，仅超级用户可禁用插件")
             return
-        await self._send_private_text(ws, user_id, "插件禁用只对当前群聊生效，请在群聊中使用 .ban <插件名>")
+
+        raw_name = self.extract_command_content(message_content, CommandType.BAN)
+        banned_user_id = self._parse_user_ban_target(raw_name)
+        if banned_user_id is None:
+            await self._send_private_text(ws, user_id, "插件禁用只对当前群聊生效；私聊可使用 .ban user:<QQ号> 封禁用户回复")
+            return
+
+        if self.bot_interfaces["test_if_super_user"](banned_user_id):
+            await self._send_private_text(ws, user_id, "不能封禁超级用户，避免管理入口被锁住")
+            return
+
+        changed = self.user_bans.ban(banned_user_id)
+        if changed:
+            await self._send_private_text(ws, user_id, f"已禁止 Bot 回复用户 {banned_user_id}")
+        else:
+            await self._send_private_text(ws, user_id, f"用户 {banned_user_id} 已在回复封禁列表中")
 
     async def _handle_unban_private(self, ws, message_content: str, user_id: int, **kwargs):
         if not self.bot_interfaces["test_if_super_user"](user_id):
             await self._send_private_text(ws, user_id, "权限不足，仅超级用户可启用插件")
             return
-        await self._send_private_text(ws, user_id, "插件启用只对当前群聊生效，请在群聊中使用 .unban <插件名>")
+
+        raw_name = self.extract_command_content(message_content, CommandType.UNBAN)
+        banned_user_id = self._parse_user_ban_target(raw_name)
+        if banned_user_id is None:
+            await self._send_private_text(ws, user_id, "插件启用只对当前群聊生效；私聊可使用 .unban user:<QQ号> 解除用户回复封禁")
+            return
+
+        changed = self.user_bans.unban(banned_user_id)
+        if changed:
+            await self._send_private_text(ws, user_id, f"已允许 Bot 回复用户 {banned_user_id}")
+        else:
+            await self._send_private_text(ws, user_id, f"用户 {banned_user_id} 本来就不在回复封禁列表中")
 
     async def _handle_draw_group(self, ws, message_content: str, group_id: int, **kwargs):
         prompt = self.extract_command_content(message_content, CommandType.DRAW)

@@ -13,17 +13,8 @@ _PLUGIN_DIR = Path(__file__).resolve().parent
 _BOT_DIR = _PLUGIN_DIR.parent
 _TMP_DIR = _BOT_DIR / "tmp"
 _RECOMMEND_MARKERS = (
-    r"C\d+\s*&&\s*推荐本本",
-    r"C\d+\s*&&\s*推薦本本",
-    r"C\d+\s*&&",
-    r"推荐本本",
-    r"推薦本本",
-    r"今日推荐",
-    r"今日推薦",
-    r"今天推荐",
-    r"今天推薦",
-    r"本日推荐",
-    r"本日推薦",
+    r"C\d+\s*(?:(?:&amp;)|&){1,2}\s*推荐本本",
+    r"C\d+\s*(?:(?:&amp;)|&){1,2}\s*推薦本本",
 )
 _IGNORE_TEXTS = {
     "更多",
@@ -237,11 +228,37 @@ def _bounded_section(page_html: str, start: int) -> str:
 
 
 def _recommend_section(page_html: str) -> str:
+    candidates: list[tuple[int, int, str]] = []
     for marker in _RECOMMEND_MARKERS:
-        match = re.search(marker, page_html, flags=re.I)
-        if match is not None:
-            return _bounded_section(page_html, match.start())
-    return page_html
+        for match in re.finditer(marker, page_html, flags=re.I):
+            section = _bounded_section(page_html, match.start())
+            real_album_count = sum(
+                1
+                for album_match in re.finditer(r"/album/(\d+)", section, flags=re.I)
+                if _is_real_album_id(album_match.group(1))
+            )
+            if real_album_count <= 0:
+                continue
+
+            heading_start = max(
+                page_html.rfind("<h1", 0, match.start()),
+                page_html.rfind("<h2", 0, match.start()),
+                page_html.rfind("<h3", 0, match.start()),
+                page_html.rfind("<h4", 0, match.start()),
+                page_html.rfind("<h5", 0, match.start()),
+                page_html.rfind("<h6", 0, match.start()),
+            )
+            link_start = page_html.rfind("<a", 0, match.start())
+            is_heading = heading_start >= 0 and heading_start > link_start and match.start() - heading_start < 300
+            score = real_album_count + (1000 if is_heading else 0)
+            candidates.append((score, match.start(), section))
+
+    if candidates:
+        candidates.sort(key=lambda item: (item[0], -item[1]), reverse=True)
+        return candidates[0][2]
+
+    print("[JM] C107 recommendation section marker not found")
+    return ""
 
 
 def _album_anchor_pattern(album_id: str) -> re.Pattern[str]:
