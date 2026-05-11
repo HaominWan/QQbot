@@ -35,6 +35,19 @@ _IGNORE_TEXTS = {
     "下载",
     "收藏",
 }
+_CATEGORY_TITLES = {
+    "同人",
+    "单本",
+    "單本",
+    "短篇",
+    "其他类",
+    "其他類",
+    "韩漫",
+    "韓漫",
+    "English Manga",
+    "一般向韩漫",
+    "一般向韓漫",
+}
 
 
 def _natural_key(path):
@@ -128,6 +141,15 @@ def _valid_title(title: str, album_id: str = "") -> bool:
     if len(title) > 220:
         return False
     return True
+
+
+def _is_real_album_id(album_id: str) -> bool:
+    # JM 首页会把分类入口也写成 /album/1 ... /album/7；真实本子编号不会这么短。
+    return album_id.isdigit() and int(album_id) >= 10000
+
+
+def _is_category_entry(album_id: str, title: str) -> bool:
+    return not _is_real_album_id(album_id) or _clean_title(title) in _CATEGORY_TITLES
 
 
 def _normalize_tags(tags: Any) -> list[str]:
@@ -323,8 +345,6 @@ def _parse_album_links(page_html: str, limit: int) -> list[dict[str, Any]]:
         album_id = match.group(1)
         if album_id in seen:
             continue
-
-        seen.add(album_id)
         anchor_match = _album_anchor_pattern(album_id).search(
             section,
             max(0, match.start() - 1000),
@@ -333,6 +353,11 @@ def _parse_album_links(page_html: str, limit: int) -> list[dict[str, Any]]:
         anchor_html = anchor_match.group(0) if anchor_match else ""
         context = _album_context(section, match.start(), match.end())
         title = _extract_title(album_id, anchor_html, context)
+        if _is_category_entry(album_id, title):
+            seen.add(album_id)
+            continue
+
+        seen.add(album_id)
         recommendations.append(
             {
                 "id": album_id,
