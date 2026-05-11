@@ -69,6 +69,27 @@ class AgentOrchestrator:
             print(f"[Agent] ignored banned group user {user_id}")
             return AgentRunResult(False, AgentAction.IGNORE, "user is banned")
 
+        if self.command_handler.is_group_bot_banned(group_id):
+            command_type = self.command_handler.get_command_type(message_content)
+            if (
+                command_type is not None
+                and self.command_handler.is_group_unban_this_command(message_content)
+                and self.bot_interfaces["test_if_super_user"](user_id)
+            ):
+                handled = await self.command_handler.handle_command(
+                    ws,
+                    MessageType.GROUP,
+                    command_type,
+                    message_content,
+                    group_id=group_id,
+                    user_id=user_id,
+                    message_id=message_id,
+                )
+                return AgentRunResult(handled, AgentAction.TOOL, "matched group unban command")
+
+            print(f"[Agent] ignored muted group {group_id}")
+            return AgentRunResult(False, AgentAction.IGNORE, "group is muted")
+
         # Store every group message so the bot can recall group history later.
         memory = self.session_manager.memory
         if memory:

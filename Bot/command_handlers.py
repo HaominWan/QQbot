@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Optional
 
 from plugins import P5_card, YGO_find_card, drawing, jm2pdf, markdown, pixiv, typst_renderer
-from plugin_state import GroupPluginBanStore, UserBanStore
+from plugin_state import GroupBotBanStore, GroupPluginBanStore, UserBanStore
 from tool_router import Tool, ToolRouter, ToolScope
 
 _BOT_DIR = Path(__file__).resolve().parent
@@ -47,6 +47,7 @@ class CommandHandler:
         self.user_sessions = user_sessions
         self.session_manager = session_manager
         self.tool_router = ToolRouter()
+        self.group_bot_bans = GroupBotBanStore(_BOT_DIR / "data" / "group_bot_bans.json")
         self.group_plugin_bans = GroupPluginBanStore(_BOT_DIR / "data" / "group_plugin_bans.json")
         self.user_bans = UserBanStore(_BOT_DIR / "data" / "banned_users.json")
         self.help_message = """========================
@@ -55,10 +56,7 @@ class CommandHandler:
 .reset             重启 Bot            ★
 .stop              强制停止 Bot        ★
 .clean             清空当前群记忆      ★
-.ban <插件名>      禁用本群插件        ★
-.unban <插件名>    启用本群插件        ★
-.ban user:<QQ号>   禁止 Bot 回复该用户 ★
-.unban user:<QQ号> 解除用户回复封禁    ★
+.ban / .unban      禁用管理            ★
 .draw              AI 绘图
 .typ / .typst      Typst 渲染
 .md / .markdown    Markdown 渲染
@@ -97,6 +95,25 @@ class CommandHandler:
 .jm recommend [数量]
 获取今日 JM 推荐栏编号，默认 10 个、最多 20 个。
 示例：.jm recommend 5""",
+            "ban": """Ban 管理语法
+
+.ban this
+禁用 Bot 在当前群聊的所有回复。
+
+.unban this
+恢复 Bot 在当前群聊的回复。
+
+.ban <插件名>
+在当前群禁用可管理插件，例如 .ban jm。
+
+.unban <插件名>
+在当前群重新启用插件，例如 .unban jm。
+
+.ban user:<QQ号>
+禁止 Bot 回复指定用户，群聊和私聊均生效。
+
+.unban user:<QQ号>
+解除指定用户的回复封禁。""",
         }
         self._register_tools()
 
@@ -230,6 +247,15 @@ class CommandHandler:
 
     def is_user_banned(self, user_id: int | str) -> bool:
         return self.user_bans.is_banned(user_id)
+
+    def is_group_bot_banned(self, group_id: int | str) -> bool:
+        return self.group_bot_bans.is_banned(group_id)
+
+    def is_group_unban_this_command(self, message_content: str) -> bool:
+        command_type = self.get_command_type(message_content)
+        if command_type != CommandType.UNBAN:
+            return False
+        return self.extract_command_content(message_content, CommandType.UNBAN).strip().lower() == "this"
 
     async def handle_command(
         self,
@@ -449,6 +475,14 @@ class CommandHandler:
             return
 
         raw_name = self.extract_command_content(message_content, CommandType.BAN)
+        if raw_name.strip().lower() == "this":
+            changed = self.group_bot_bans.ban(group_id)
+            if changed:
+                await self._send_group_text(ws, group_id, "已禁用 Bot 在本群的回复，使用 .unban this 恢复")
+            else:
+                await self._send_group_text(ws, group_id, "Bot 已经在本群禁用回复")
+            return
+
         banned_user_id = self._parse_user_ban_target(raw_name)
         if banned_user_id is not None:
             if self.bot_interfaces["test_if_super_user"](banned_user_id):
@@ -486,6 +520,14 @@ class CommandHandler:
             return
 
         raw_name = self.extract_command_content(message_content, CommandType.UNBAN)
+        if raw_name.strip().lower() == "this":
+            changed = self.group_bot_bans.unban(group_id)
+            if changed:
+                await self._send_group_text(ws, group_id, "已恢复 Bot 在本群的回复")
+            else:
+                await self._send_group_text(ws, group_id, "Bot 在本群本来就是可回复状态")
+            return
+
         banned_user_id = self._parse_user_ban_target(raw_name)
         if banned_user_id is not None:
             changed = self.user_bans.unban(banned_user_id)
