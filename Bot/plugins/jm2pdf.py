@@ -42,6 +42,7 @@ _HOME_PAGE_CANDIDATES = (
 _MAX_HOME_CANDIDATES = 30
 _JM_HOME_HOST_KEYWORDS = ("18comic", "jmcomic", "jm18c")
 _DIRECT_TIMEOUT = 12
+_KNOWN_RECOMMEND_PROMOTE_PATHS = ("/promotes/29",)
 _DIRECT_HEADERS = {
     "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "accept-language": "zh-CN,zh;q=0.9",
@@ -911,6 +912,7 @@ def _fetch_recommendation_source_sync() -> tuple[str, bool]:
     home_candidates = _home_page_candidates()
     _jm_log(f"recommend home candidates={home_candidates}")
     pending: list[tuple[str, bool]] = [(path, False) for path in home_candidates]
+    pending.extend((path, True) for path in _KNOWN_RECOMMEND_PROMOTE_PATHS)
     seen: set[tuple[str, bool]] = set()
     fallback_html = ""
 
@@ -1003,8 +1005,10 @@ def _write_recommend_debug_log_sync(limit: int = 10, report_path: str | os.PathL
 
     home_candidates = _home_page_candidates()
     lines.append(f"home_candidates: {home_candidates}")
+    lines.append(f"known_recommend_promote_paths: {list(_KNOWN_RECOMMEND_PROMOTE_PATHS)}")
     _write_debug_lines(report_path, lines)
     pending: list[tuple[str, bool]] = [(path, False) for path in home_candidates]
+    pending.extend((path, True) for path in _KNOWN_RECOMMEND_PROMOTE_PATHS)
     seen: set[tuple[str, bool]] = set()
 
     while pending:
