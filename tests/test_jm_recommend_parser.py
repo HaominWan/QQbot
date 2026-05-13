@@ -1,5 +1,6 @@
 import importlib.util
 import sys
+import tempfile
 import types
 import unittest
 from pathlib import Path
@@ -74,6 +75,7 @@ JM_HOME_RECOMMEND_HTML = """
 
 PROMOTE_ENTRY_HOME_HTML = """
 <div class="col-lg-12 col-md-12">
+  <form><input name="password" type="password" value="secret-password" /></form>
   <div class="row">
     <h4 class="talk-title"><span>C108&&推荐本本</span></h4>
     <a class="talk-more-btn" href="https://18comic.vip/promotes/29">看更多</a>
@@ -126,7 +128,7 @@ class JmRecommendParserTests(unittest.TestCase):
 
     def test_regex_fallback_accepts_double_ampersand_simplified_marker(self):
         original_dom_parser = self.jm2pdf._recommend_section_by_dom
-        self.jm2pdf._recommend_section_by_dom = lambda _html: ""
+        self.jm2pdf._recommend_section_by_dom = lambda _html, **_kwargs: ""
         try:
             html = JM_HOME_RECOMMEND_HTML.replace("C107&推薦本本", "C108&&推荐本本")
             albums = self.jm2pdf._parse_album_links(html, 1)
@@ -152,6 +154,30 @@ class JmRecommendParserTests(unittest.TestCase):
         self.assertTrue(allow_full_page)
         self.assertEqual([album["id"] for album in albums], ["1439001", "1439002"])
         self.assertEqual(albums[0]["tags"], ["中文"])
+
+    def test_debug_log_follows_promote_page_and_redacts_sensitive_values(self):
+        client = FakeRecommendClient()
+        original_create_option = self.jm2pdf._create_option
+        original_new_html_client = self.jm2pdf._new_html_client
+        original_tmp_dir = self.jm2pdf._TMP_DIR
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                self.jm2pdf._TMP_DIR = Path(tmp)
+                self.jm2pdf._create_option = lambda: object()
+                self.jm2pdf._new_html_client = lambda _option: client
+                report_path = Path(self.jm2pdf._write_recommend_debug_log_sync())
+                report = report_path.read_text(encoding="utf-8")
+        finally:
+            self.jm2pdf._TMP_DIR = original_tmp_dir
+            self.jm2pdf._create_option = original_create_option
+            self.jm2pdf._new_html_client = original_new_html_client
+
+        self.assertIn("path: '/'", report)
+        self.assertIn("path: '/promotes/29'", report)
+        self.assertIn("recommend_promote_paths: ['/promotes/29']", report)
+        self.assertIn("parsed_full_page_ids: ['1439001', '1439002']", report)
+        self.assertIn('value="<redacted>"', report)
+        self.assertNotIn("secret-password", report)
 
 
 if __name__ == "__main__":

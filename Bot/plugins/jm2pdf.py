@@ -4,6 +4,7 @@ import html
 import os
 import re
 import unicodedata
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -320,13 +321,14 @@ def _row_following_heading_section(element: Any) -> str:
     return ""
 
 
-def _recommend_section_by_dom(page_html: str) -> str:
+def _recommend_section_by_dom(page_html: str, *, log_errors: bool = True) -> str:
     try:
         from lxml import html as lxml_html
 
         root = lxml_html.fromstring(page_html)
     except Exception as exc:
-        print(f"[JM] Failed to parse home page DOM: {exc}")
+        if log_errors:
+            print(f"[JM] Failed to parse home page DOM: {exc}")
         return ""
 
     candidates: list[tuple[int, str]] = []
@@ -373,7 +375,7 @@ def _recommend_section_by_dom(page_html: str) -> str:
 
 def _recommend_section(page_html: str, *, log_missing: bool = True) -> str:
     page_html = _decode_unicode_escapes(page_html)
-    dom_section = _recommend_section_by_dom(page_html)
+    dom_section = _recommend_section_by_dom(page_html, log_errors=log_missing)
     if dom_section:
         return dom_section
 
@@ -434,6 +436,57 @@ def _recommend_promote_paths(page_html: str) -> list[str]:
                 seen.add(path)
                 paths.append(path)
     return paths
+
+
+def _redact_debug_text(text: str) -> str:
+    text = re.sub(
+        r"(<input\b[^>]*(?:password|passwd|username|login|email)[^>]*\bvalue\s*=\s*['\"])([^'\"]*)(['\"])",
+        r"\1<redacted>\3",
+        text,
+        flags=re.I | re.S,
+    )
+    text = re.sub(
+        r"(\b(?:password|passwd|token|cookie|authorization|email|username)\b\s*[:=]\s*['\"]?)([^'\"\s<>]+)",
+        r"\1<redacted>",
+        text,
+        flags=re.I,
+    )
+    return text
+
+
+def _debug_snippet(page_html: str, center: int, radius: int = 1200) -> str:
+    start = max(0, center - radius)
+    end = min(len(page_html), center + radius)
+    snippet = page_html[start:end]
+    snippet = _redact_debug_text(snippet)
+    return f"[offset {start}:{end}]\n{snippet}"
+
+
+def _recommend_marker_matches(page_html: str) -> list[re.Match[str]]:
+    page_html = _decode_unicode_escapes(page_html)
+    matches: list[re.Match[str]] = []
+    for marker in _RECOMMEND_MARKERS:
+        matches.extend(re.finditer(marker, page_html, flags=re.I))
+    return sorted(matches, key=lambda item: item.start())
+
+
+def _debug_nearby_matches(page_html: str) -> list[re.Match[str]]:
+    page_html = _decode_unicode_escapes(page_html)
+    return list(re.finditer(r"C\d+|推荐本本|推薦本本|promotes/\d+", page_html, flags=re.I))
+
+
+def _album_ids_in_fragment(fragment: str, limit: int = 20) -> list[str]:
+    ids: list[str] = []
+    seen: set[str] = set()
+    for match in re.finditer(r"/album/(\d+)", fragment, flags=re.I):
+        album_id = match.group(1)
+        if album_id in seen or not _is_real_album_id(album_id):
+            continue
+        seen.add(album_id)
+        ids.append(album_id)
+        if len(ids) >= limit:
+            break
+    return ids
 
 
 def _album_anchor_pattern(album_id: str) -> re.Pattern[str]:
@@ -655,6 +708,93 @@ def _fetch_recommendation_source_sync() -> tuple[str, bool]:
         return fallback_html, False
 
     raise RuntimeError("无法获取 JM 推荐页")
+
+
+def _write_recommend_debug_log_sync(limit: int = 10) -> str:
+    limit = max(1, min(int(limit), 20))
+    debug_dir = _TMP_DIR / "jm_debug"
+    debug_dir.mkdir(parents=True, exist_ok=True)
+    report_path = debug_dir / f"jm_recommend_debug_{datetime.now():%Y%m%d_%H%M%S}.txt"
+
+    lines: list[str] = [
+        "JM recommend debug report",
+        f"time: {datetime.now().isoformat(timespec='seconds')}",
+        f"limit: {limit}",
+        "",
+    ]
+
+    try:
+        option = _create_option()
+        client = _new_html_client(option)
+        lines.append(f"client_type: {type(client).__module__}.{type(client).__name__}")
+    except Exception as exc:
+        lines.append(f"client_create_error: {type(exc).__name__}: {exc}")
+        report_path.write_text("\n".join(lines), encoding="utf-8")
+        return str(report_path)
+
+    pending: list[tuple[str, bool]] = [("/", False), ("", False), ("/?page=1", False)]
+    seen: set[tuple[str, bool]] = set()
+
+    while pending:
+        path, allow_full_page = pending.pop(0)
+        key = (path, allow_full_page)
+        if key in seen:
+            continue
+        seen.add(key)
+
+        lines.extend(
+            [
+                "",
+                "=" * 72,
+                f"path: {path!r}",
+                f"allow_full_page: {allow_full_page}",
+            ]
+        )
+
+        try:
+            page_html = _fetch_html_from_client(client, path)
+        except Exception as exc:
+            lines.append(f"fetch_error: {type(exc).__name__}: {exc}")
+            continue
+
+        page_html = _decode_unicode_escapes(page_html)
+        lines.append(f"html_length: {len(page_html)}")
+
+        marker_matches = _recommend_marker_matches(page_html)
+        lines.append(f"recommend_marker_count: {len(marker_matches)}")
+        for index, marker_match in enumerate(marker_matches[:5], start=1):
+            lines.append(f"marker_{index}: {marker_match.group(0)!r} at {marker_match.start()}")
+            lines.append(_debug_snippet(page_html, marker_match.start(), radius=900))
+
+        promote_paths = _recommend_promote_paths(page_html)
+        lines.append(f"recommend_promote_paths: {promote_paths or []}")
+
+        section = _recommend_section(page_html, log_missing=False)
+        lines.append(f"recommend_section_length: {len(section)}")
+        lines.append(f"recommend_section_album_ids: {_album_ids_in_fragment(section)}")
+
+        parsed_normal = _parse_album_links(page_html, limit, log_missing=False)
+        parsed_full = _parse_album_links(page_html, limit, allow_full_page=True, log_missing=False)
+        lines.append(f"parsed_normal_ids: {[album.get('id') for album in parsed_normal]}")
+        lines.append(f"parsed_full_page_ids: {[album.get('id') for album in parsed_full]}")
+
+        if not marker_matches:
+            nearby_matches = _debug_nearby_matches(page_html)
+            lines.append(f"nearby_keyword_count: {len(nearby_matches)}")
+            for index, nearby_match in enumerate(nearby_matches[:8], start=1):
+                lines.append(f"nearby_{index}: {nearby_match.group(0)!r} at {nearby_match.start()}")
+                lines.append(_debug_snippet(page_html, nearby_match.start(), radius=500))
+
+        if not allow_full_page:
+            for promote_path in reversed(promote_paths):
+                pending.insert(0, (promote_path, True))
+
+    report_path.write_text("\n".join(lines), encoding="utf-8")
+    return str(report_path)
+
+
+async def export_recommend_debug_log(limit: int = 10) -> str:
+    return await asyncio.to_thread(_write_recommend_debug_log_sync, limit)
 
 
 async def get_daily_recommendations(limit: int = 10) -> list[dict[str, Any]]:

@@ -94,7 +94,11 @@ class CommandHandler:
 
 .jm recommend [数量]
 获取今日 JM 推荐栏编号，默认 10 个、最多 20 个。
-示例：.jm recommend 5""",
+示例：.jm recommend 5
+
+.jm recommend debug
+导出 JM 推荐栏解析调试日志。
+示例：.jm debug""",
             "ban": """Ban 管理语法
 
 .ban this
@@ -650,6 +654,10 @@ class CommandHandler:
 
     async def _handle_jm_group(self, ws, message_content: str, group_id: int, **kwargs):
         command_content = self.extract_command_content(message_content, CommandType.JM)
+        if self._is_jm_debug_command(command_content):
+            await self._send_jm_debug_group(ws, group_id, command_content)
+            return
+
         if self._is_jm_recommend_command(command_content):
             await self._send_jm_recommend_group(ws, group_id, command_content)
             return
@@ -674,6 +682,10 @@ class CommandHandler:
 
     async def _handle_jm_private(self, ws, message_content: str, user_id: int, **kwargs):
         command_content = self.extract_command_content(message_content, CommandType.JM)
+        if self._is_jm_debug_command(command_content):
+            await self._send_jm_debug_private(ws, user_id, command_content)
+            return
+
         if self._is_jm_recommend_command(command_content):
             await self._send_jm_recommend_private(ws, user_id, command_content)
             return
@@ -699,6 +711,17 @@ class CommandHandler:
     def _is_jm_recommend_command(command_content: str) -> bool:
         parts = command_content.strip().split(maxsplit=1)
         return bool(parts and parts[0].lower() in {"recommend", "rec", "daily", "today"})
+
+    @staticmethod
+    def _is_jm_debug_command(command_content: str) -> bool:
+        parts = command_content.strip().lower().split()
+        if not parts:
+            return False
+        if parts[0] in {"debug", "dbg", "log"}:
+            return True
+        return parts[0] in {"recommend", "rec", "daily", "today"} and any(
+            part in {"debug", "dbg", "log"} for part in parts[1:]
+        )
 
     @staticmethod
     def _parse_jm_recommend_limit(command_content: str) -> int:
@@ -739,6 +762,37 @@ class CommandHandler:
         await self._send_private_text(ws, user_id, "正在获取今日 JM 推荐栏...")
         recommendations = await jm2pdf.get_daily_recommendations(limit)
         await self._send_private_text(ws, user_id, self._format_jm_recommendations(recommendations))
+
+    async def _send_jm_debug_group(self, ws, group_id: int, command_content: str):
+        limit = self._parse_jm_recommend_limit(command_content)
+        await self._send_group_text(ws, group_id, "正在导出 JM 推荐栏调试日志...")
+        debug_log = await jm2pdf.export_recommend_debug_log(limit)
+        try:
+            await self.bot_interfaces["upload_group_file"](
+                ws,
+                group_id,
+                os.path.abspath(debug_log),
+                os.path.basename(debug_log),
+                "/",
+            )
+            await self._send_group_text(ws, group_id, "已导出 JM 调试日志，发我这个 txt 就能继续定位。")
+        except Exception as exc:
+            await self._send_group_text(ws, group_id, f"调试日志已生成，但上传失败：{exc}\n本地路径：{debug_log}")
+
+    async def _send_jm_debug_private(self, ws, user_id: int, command_content: str):
+        limit = self._parse_jm_recommend_limit(command_content)
+        await self._send_private_text(ws, user_id, "正在导出 JM 推荐栏调试日志...")
+        debug_log = await jm2pdf.export_recommend_debug_log(limit)
+        try:
+            await self.bot_interfaces["upload_private_file"](
+                ws,
+                user_id,
+                os.path.abspath(debug_log),
+                os.path.basename(debug_log),
+            )
+            await self._send_private_text(ws, user_id, "已导出 JM 调试日志，发我这个 txt 就能继续定位。")
+        except Exception as exc:
+            await self._send_private_text(ws, user_id, f"调试日志已生成，但上传失败：{exc}\n本地路径：{debug_log}")
 
     async def _handle_pixiv_group(self, ws, message_content: str, group_id: int, **kwargs):
         command_content = self.extract_command_content(message_content, CommandType.PIXIV)
