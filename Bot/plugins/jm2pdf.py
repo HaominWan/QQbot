@@ -336,6 +336,25 @@ def _direct_headers_for_url(url: str) -> dict[str, str]:
     return headers
 
 
+def _absolute_url_for_origin(origin_url: str, path: str) -> str:
+    parsed = urlparse(origin_url)
+    if not parsed.netloc:
+        return path
+    return f"{parsed.scheme or 'https'}://{parsed.netloc}/{path.lstrip('/')}"
+
+
+def _recommend_initial_queue(home_candidates: list[str]) -> list[tuple[str, bool]]:
+    pending: list[tuple[str, bool]] = []
+    for candidate in home_candidates:
+        pending.append((candidate, False))
+        if re.match(r"https?://", candidate, flags=re.I):
+            pending.extend(
+                (_absolute_url_for_origin(candidate, promote_path), True)
+                for promote_path in _KNOWN_RECOMMEND_PROMOTE_PATHS
+            )
+    return pending
+
+
 def _fetch_direct_html(url: str) -> str:
     headers = _direct_headers_for_url(url)
     curl_error: Exception | None = None
@@ -911,8 +930,7 @@ def _fetch_recommendation_source_sync() -> tuple[str, bool]:
     client = _new_html_client(_create_option())
     home_candidates = _home_page_candidates()
     _jm_log(f"recommend home candidates={home_candidates}")
-    pending: list[tuple[str, bool]] = [(path, False) for path in home_candidates]
-    pending.extend((path, True) for path in _KNOWN_RECOMMEND_PROMOTE_PATHS)
+    pending = _recommend_initial_queue(home_candidates)
     seen: set[tuple[str, bool]] = set()
     fallback_html = ""
 
@@ -1007,8 +1025,7 @@ def _write_recommend_debug_log_sync(limit: int = 10, report_path: str | os.PathL
     lines.append(f"home_candidates: {home_candidates}")
     lines.append(f"known_recommend_promote_paths: {list(_KNOWN_RECOMMEND_PROMOTE_PATHS)}")
     _write_debug_lines(report_path, lines)
-    pending: list[tuple[str, bool]] = [(path, False) for path in home_candidates]
-    pending.extend((path, True) for path in _KNOWN_RECOMMEND_PROMOTE_PATHS)
+    pending = _recommend_initial_queue(home_candidates)
     seen: set[tuple[str, bool]] = set()
 
     while pending:

@@ -231,13 +231,21 @@ class JmRecommendParserTests(unittest.TestCase):
 
     def test_fetch_falls_back_to_known_recommend_promote_page(self):
         client = FakeCategoryWithPromoteClient()
+        direct_urls: list[str] = []
         original_create_option = self.jm2pdf._create_option
         original_new_html_client = self.jm2pdf._new_html_client
         original_fetch_direct_html = self.jm2pdf._fetch_direct_html
         try:
             self.jm2pdf._create_option = lambda: object()
             self.jm2pdf._new_html_client = lambda _option: client
-            self.jm2pdf._fetch_direct_html = lambda _url: MEIMAN_CATEGORY_HTML
+
+            def fake_fetch_direct_html(url: str) -> str:
+                direct_urls.append(url)
+                if url.endswith("/promotes/29"):
+                    return PROMOTE_LIST_HTML
+                return MEIMAN_CATEGORY_HTML
+
+            self.jm2pdf._fetch_direct_html = fake_fetch_direct_html
             html, allow_full_page = self.jm2pdf._fetch_recommendation_source_sync()
             albums = self.jm2pdf._parse_album_links(html, 10, allow_full_page=allow_full_page)
         finally:
@@ -245,7 +253,8 @@ class JmRecommendParserTests(unittest.TestCase):
             self.jm2pdf._new_html_client = original_new_html_client
             self.jm2pdf._fetch_direct_html = original_fetch_direct_html
 
-        self.assertIn("/promotes/29", client.paths)
+        self.assertNotIn("/promotes/29", client.paths)
+        self.assertIn("https://18comic.vip/promotes/29", direct_urls)
         self.assertTrue(allow_full_page)
         self.assertEqual([album["id"] for album in albums], ["1439001", "1439002"])
 
