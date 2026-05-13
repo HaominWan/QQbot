@@ -766,7 +766,12 @@ class CommandHandler:
     async def _send_jm_debug_group(self, ws, group_id: int, command_content: str):
         limit = self._parse_jm_recommend_limit(command_content)
         await self._send_group_text(ws, group_id, "正在导出 JM 推荐栏调试日志...")
-        debug_log = await jm2pdf.export_recommend_debug_log(limit)
+        try:
+            debug_log = await jm2pdf.export_recommend_debug_log(limit)
+        except Exception as exc:
+            await self._send_group_text(ws, group_id, f"JM 调试日志导出失败：{type(exc).__name__}: {exc}")
+            return
+
         try:
             await self.bot_interfaces["upload_group_file"](
                 ws,
@@ -782,7 +787,12 @@ class CommandHandler:
     async def _send_jm_debug_private(self, ws, user_id: int, command_content: str):
         limit = self._parse_jm_recommend_limit(command_content)
         await self._send_private_text(ws, user_id, "正在导出 JM 推荐栏调试日志...")
-        debug_log = await jm2pdf.export_recommend_debug_log(limit)
+        try:
+            debug_log = await jm2pdf.export_recommend_debug_log(limit)
+        except Exception as exc:
+            await self._send_private_text(ws, user_id, f"JM 调试日志导出失败：{type(exc).__name__}: {exc}")
+            return
+
         try:
             await self.bot_interfaces["upload_private_file"](
                 ws,

@@ -710,11 +710,24 @@ def _fetch_recommendation_source_sync() -> tuple[str, bool]:
     raise RuntimeError("无法获取 JM 推荐页")
 
 
-def _write_recommend_debug_log_sync(limit: int = 10) -> str:
-    limit = max(1, min(int(limit), 20))
+def _recommend_debug_report_path() -> Path:
     debug_dir = _TMP_DIR / "jm_debug"
     debug_dir.mkdir(parents=True, exist_ok=True)
-    report_path = debug_dir / f"jm_recommend_debug_{datetime.now():%Y%m%d_%H%M%S}.txt"
+    return debug_dir / f"jm_recommend_debug_{datetime.now():%Y%m%d_%H%M%S_%f}.txt"
+
+
+def _write_debug_lines(report_path: Path, lines: list[str]) -> None:
+    report_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _append_debug_lines(report_path: Path, lines: list[str]) -> None:
+    with report_path.open("a", encoding="utf-8") as file:
+        file.write("\n".join(lines) + "\n")
+
+
+def _write_recommend_debug_log_sync(limit: int = 10, report_path: str | os.PathLike[str] | None = None) -> str:
+    limit = max(1, min(int(limit), 20))
+    report_path = Path(report_path) if report_path is not None else _recommend_debug_report_path()
 
     lines: list[str] = [
         "JM recommend debug report",
@@ -722,6 +735,7 @@ def _write_recommend_debug_log_sync(limit: int = 10) -> str:
         f"limit: {limit}",
         "",
     ]
+    _write_debug_lines(report_path, lines)
 
     try:
         option = _create_option()
@@ -729,8 +743,9 @@ def _write_recommend_debug_log_sync(limit: int = 10) -> str:
         lines.append(f"client_type: {type(client).__module__}.{type(client).__name__}")
     except Exception as exc:
         lines.append(f"client_create_error: {type(exc).__name__}: {exc}")
-        report_path.write_text("\n".join(lines), encoding="utf-8")
+        _write_debug_lines(report_path, lines)
         return str(report_path)
+    _write_debug_lines(report_path, lines)
 
     pending: list[tuple[str, bool]] = [("/", False), ("", False), ("/?page=1", False)]
     seen: set[tuple[str, bool]] = set()
@@ -750,11 +765,13 @@ def _write_recommend_debug_log_sync(limit: int = 10) -> str:
                 f"allow_full_page: {allow_full_page}",
             ]
         )
+        _write_debug_lines(report_path, lines)
 
         try:
             page_html = _fetch_html_from_client(client, path)
         except Exception as exc:
             lines.append(f"fetch_error: {type(exc).__name__}: {exc}")
+            _write_debug_lines(report_path, lines)
             continue
 
         page_html = _decode_unicode_escapes(page_html)
@@ -789,12 +806,29 @@ def _write_recommend_debug_log_sync(limit: int = 10) -> str:
             for promote_path in reversed(promote_paths):
                 pending.insert(0, (promote_path, True))
 
-    report_path.write_text("\n".join(lines), encoding="utf-8")
+        _write_debug_lines(report_path, lines)
+
     return str(report_path)
 
 
-async def export_recommend_debug_log(limit: int = 10) -> str:
-    return await asyncio.to_thread(_write_recommend_debug_log_sync, limit)
+async def export_recommend_debug_log(limit: int = 10, timeout: float = 45.0) -> str:
+    report_path = _recommend_debug_report_path()
+    try:
+        return await asyncio.wait_for(
+            asyncio.to_thread(_write_recommend_debug_log_sync, limit, report_path),
+            timeout=timeout,
+        )
+    except asyncio.TimeoutError:
+        _append_debug_lines(
+            report_path,
+            [
+                "",
+                "=" * 72,
+                f"debug_timeout: export did not finish within {timeout:.0f}s",
+                "hint: the last path above is probably where jmcomic/get_jm_html blocked.",
+            ],
+        )
+        return str(report_path)
 
 
 async def get_daily_recommendations(limit: int = 10) -> list[dict[str, Any]]:

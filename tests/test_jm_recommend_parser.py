@@ -1,6 +1,8 @@
+import asyncio
 import importlib.util
 import sys
 import tempfile
+import time
 import types
 import unittest
 from pathlib import Path
@@ -178,6 +180,27 @@ class JmRecommendParserTests(unittest.TestCase):
         self.assertIn("parsed_full_page_ids: ['1439001', '1439002']", report)
         self.assertIn('value="<redacted>"', report)
         self.assertNotIn("secret-password", report)
+
+    def test_debug_export_timeout_returns_partial_report_path(self):
+        original_tmp_dir = self.jm2pdf._TMP_DIR
+        original_writer = self.jm2pdf._write_recommend_debug_log_sync
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                self.jm2pdf._TMP_DIR = Path(tmp)
+
+                def slow_writer(*_args, **_kwargs):
+                    time.sleep(0.2)
+                    return ""
+
+                self.jm2pdf._write_recommend_debug_log_sync = slow_writer
+                report_path = Path(asyncio.run(self.jm2pdf.export_recommend_debug_log(timeout=0.01)))
+                self.assertTrue(report_path.exists())
+                report = report_path.read_text(encoding="utf-8")
+        finally:
+            self.jm2pdf._TMP_DIR = original_tmp_dir
+            self.jm2pdf._write_recommend_debug_log_sync = original_writer
+
+        self.assertIn("debug_timeout", report)
 
 
 if __name__ == "__main__":
