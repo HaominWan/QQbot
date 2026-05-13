@@ -72,6 +72,46 @@ JM_HOME_RECOMMEND_HTML = """
 """
 
 
+PROMOTE_ENTRY_HOME_HTML = """
+<div class="col-lg-12 col-md-12">
+  <div class="row">
+    <h4 class="talk-title"><span>C108&&推荐本本</span></h4>
+    <a class="talk-more-btn" href="https://18comic.vip/promotes/29">看更多</a>
+  </div>
+</div>
+"""
+
+
+PROMOTE_LIST_HTML = """
+<div class="row">
+  <div class="list-col">
+    <a href="/album/1439001/promoted-one">
+      <img title="Promoted One" alt="Promoted One" />
+    </a>
+    <div class="tags"><a href="/search/photos?search_query=中文">中文</a></div>
+  </div>
+  <div class="list-col">
+    <a href="/album/1439002/promoted-two">
+      <img title="Promoted Two" alt="Promoted Two" />
+    </a>
+  </div>
+</div>
+"""
+
+
+class FakeRecommendClient:
+    def __init__(self):
+        self.paths: list[str] = []
+
+    def get_jm_html(self, path: str) -> str:
+        self.paths.append(path)
+        if path == "/":
+            return PROMOTE_ENTRY_HOME_HTML
+        if path == "/promotes/29":
+            return PROMOTE_LIST_HTML
+        return ""
+
+
 class JmRecommendParserTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -94,6 +134,24 @@ class JmRecommendParserTests(unittest.TestCase):
             self.jm2pdf._recommend_section_by_dom = original_dom_parser
 
         self.assertEqual([album["id"] for album in albums], ["1437829"])
+
+    def test_fetch_follows_recommend_promote_page_when_home_section_has_no_albums(self):
+        client = FakeRecommendClient()
+        original_create_option = self.jm2pdf._create_option
+        original_new_html_client = self.jm2pdf._new_html_client
+        try:
+            self.jm2pdf._create_option = lambda: object()
+            self.jm2pdf._new_html_client = lambda _option: client
+            html, allow_full_page = self.jm2pdf._fetch_recommendation_source_sync()
+            albums = self.jm2pdf._parse_album_links(html, 10, allow_full_page=allow_full_page)
+        finally:
+            self.jm2pdf._create_option = original_create_option
+            self.jm2pdf._new_html_client = original_new_html_client
+
+        self.assertEqual(client.paths, ["/", "/promotes/29"])
+        self.assertTrue(allow_full_page)
+        self.assertEqual([album["id"] for album in albums], ["1439001", "1439002"])
+        self.assertEqual(albums[0]["tags"], ["中文"])
 
 
 if __name__ == "__main__":

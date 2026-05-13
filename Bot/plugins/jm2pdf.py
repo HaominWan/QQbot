@@ -222,15 +222,19 @@ def _new_html_client(option):
     raise RuntimeError("当前 jmcomic 版本不支持 HTML 客户端")
 
 
+def _fetch_html_from_client(client: Any, path: str) -> str:
+    if hasattr(client, "get_jm_html"):
+        return _response_to_html(client.get_jm_html(path))
+    if hasattr(client, "get_html"):
+        return _response_to_html(client.get_html(path))
+    raise RuntimeError("当前 jmcomic HTML 客户端不支持页面抓取")
+
+
 def _fetch_home_html_sync() -> str:
     client = _new_html_client(_create_option())
-
     for path in ("/", "", "/?page=1"):
         try:
-            if hasattr(client, "get_jm_html"):
-                return _response_to_html(client.get_jm_html(path))
-            if hasattr(client, "get_html"):
-                return _response_to_html(client.get_html(path))
+            return _fetch_html_from_client(client, path)
         except Exception as exc:
             print(f"[JM] Failed to fetch home page {path!r}: {exc}")
 
@@ -367,7 +371,7 @@ def _recommend_section_by_dom(page_html: str) -> str:
     return candidates[0][1]
 
 
-def _recommend_section(page_html: str) -> str:
+def _recommend_section(page_html: str, *, log_missing: bool = True) -> str:
     page_html = _decode_unicode_escapes(page_html)
     dom_section = _recommend_section_by_dom(page_html)
     if dom_section:
@@ -398,10 +402,38 @@ def _recommend_section(page_html: str) -> str:
         candidates.sort(key=lambda item: (item[0], -item[1]), reverse=True)
         return candidates[0][2]
 
-    nearby_titles = re.findall(r">([^<>]*(?:C107|推荐|推薦)[^<>]*)<", page_html, flags=re.I)
-    preview = " | ".join(_clean_text(title) for title in nearby_titles[:8] if _clean_text(title))
-    print(f"[JM] C107 recommendation section marker not found. nearby titles: {preview or 'none'}")
+    if log_missing:
+        nearby_titles = re.findall(r">([^<>]*(?:C\d+|推荐|推薦)[^<>]*)<", page_html, flags=re.I)
+        preview = " | ".join(_clean_text(title) for title in nearby_titles[:8] if _clean_text(title))
+        print(f"[JM] Cxxx recommendation section marker not found. nearby titles: {preview or 'none'}")
     return ""
+
+
+def _normalize_site_path(href: str) -> str:
+    href = html.unescape(_decode_unicode_escapes(href or "")).strip()
+    href = re.sub(r"^https?://[^/]+", "", href, flags=re.I)
+    href = href.split("#", 1)[0]
+    return href or "/"
+
+
+def _recommend_promote_paths(page_html: str) -> list[str]:
+    page_html = _decode_unicode_escapes(page_html)
+    paths: list[str] = []
+    seen: set[str] = set()
+    marker_matches: list[re.Match[str]] = []
+    for marker in _RECOMMEND_MARKERS:
+        marker_matches.extend(re.finditer(marker, page_html, flags=re.I))
+
+    for marker_match in sorted(marker_matches, key=lambda item: item.start()):
+        window_start = max(0, marker_match.start() - 2500)
+        window_end = min(len(page_html), marker_match.end() + 5000)
+        window = page_html[window_start:window_end]
+        for promote_match in re.finditer(r"href\s*=\s*([\"'])([^\"']*/promotes/\d+[^\"']*)\1", window, flags=re.I):
+            path = _normalize_site_path(promote_match.group(2))
+            if path not in seen:
+                seen.add(path)
+                paths.append(path)
+    return paths
 
 
 def _album_anchor_pattern(album_id: str) -> re.Pattern[str]:
@@ -497,8 +529,16 @@ def _extract_tags(context: str, title: str, album_id: str) -> list[str]:
     return tags
 
 
-def _parse_album_links(page_html: str, limit: int) -> list[dict[str, Any]]:
-    section = _recommend_section(page_html)
+def _parse_album_links(
+    page_html: str,
+    limit: int,
+    *,
+    allow_full_page: bool = False,
+    log_missing: bool = True,
+) -> list[dict[str, Any]]:
+    section = _recommend_section(page_html, log_missing=log_missing and not allow_full_page)
+    if not section and allow_full_page:
+        section = _decode_unicode_escapes(page_html)
     seen: set[str] = set()
     recommendations: list[dict[str, Any]] = []
     for match in re.finditer(r"/album/(\d+)", section, flags=re.I):
@@ -581,11 +621,47 @@ def _enrich_album_details_sync(albums: list[dict[str, Any]]) -> list[dict[str, A
     return albums
 
 
+def _fetch_recommendation_source_sync() -> tuple[str, bool]:
+    client = _new_html_client(_create_option())
+    pending: list[tuple[str, bool]] = [("/", False), ("", False), ("/?page=1", False)]
+    seen: set[tuple[str, bool]] = set()
+    fallback_html = ""
+
+    while pending:
+        path, allow_full_page = pending.pop(0)
+        key = (path, allow_full_page)
+        if key in seen:
+            continue
+        seen.add(key)
+
+        try:
+            page_html = _fetch_html_from_client(client, path)
+        except Exception as exc:
+            print(f"[JM] Failed to fetch recommendation page {path!r}: {exc}")
+            continue
+
+        if not fallback_html:
+            fallback_html = page_html
+
+        albums = _parse_album_links(page_html, 1, allow_full_page=allow_full_page, log_missing=False)
+        if albums:
+            return page_html, allow_full_page
+
+        if not allow_full_page:
+            for promote_path in reversed(_recommend_promote_paths(page_html)):
+                pending.insert(0, (promote_path, True))
+
+    if fallback_html:
+        return fallback_html, False
+
+    raise RuntimeError("无法获取 JM 推荐页")
+
+
 async def get_daily_recommendations(limit: int = 10) -> list[dict[str, Any]]:
     limit = max(1, min(int(limit), 20))
     try:
-        page_html = await asyncio.to_thread(_fetch_home_html_sync)
-        albums = _parse_album_links(page_html, limit)
+        page_html, allow_full_page = await asyncio.to_thread(_fetch_recommendation_source_sync)
+        albums = _parse_album_links(page_html, limit, allow_full_page=allow_full_page)
         return await asyncio.to_thread(_enrich_album_details_sync, albums)
     except Exception as exc:
         print(f"[JM] Recommend failed: {exc}")
