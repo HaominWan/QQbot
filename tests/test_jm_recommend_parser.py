@@ -103,6 +103,21 @@ PROMOTE_LIST_HTML = """
 """
 
 
+MEIMAN_CATEGORY_HTML = """
+<!doctype html>
+<html>
+<head>
+  <meta property="og:title" content=" 最新的English Manga Comics - 禁漫天堂">
+  <meta property="og:url" content="https://jmcomic-zzz.one/albums/meiman">
+  <link rel="canonical" href="https://jmcomic-zzz.one/albums/meiman">
+</head>
+<body>
+  <a href="/album/205460/meiman"><img title="English category entry" /></a>
+</body>
+</html>
+"""
+
+
 class FakeRecommendClient:
     def __init__(self):
         self.paths: list[str] = []
@@ -114,6 +129,15 @@ class FakeRecommendClient:
         if path == "/promotes/29":
             return PROMOTE_LIST_HTML
         return ""
+
+
+class FakeCategoryClient:
+    def __init__(self):
+        self.paths: list[str] = []
+
+    def get_jm_html(self, path: str) -> str:
+        self.paths.append(path)
+        return MEIMAN_CATEGORY_HTML
 
 
 class JmRecommendParserTests(unittest.TestCase):
@@ -162,6 +186,35 @@ class JmRecommendParserTests(unittest.TestCase):
         self.assertTrue(allow_full_page)
         self.assertEqual([album["id"] for album in albums], ["1439001", "1439002"])
         self.assertEqual(albums[0]["tags"], ["中文"])
+
+    def test_fetch_tries_direct_homepage_when_jmcomic_root_returns_category_page(self):
+        client = FakeCategoryClient()
+        direct_urls: list[str] = []
+        original_create_option = self.jm2pdf._create_option
+        original_new_html_client = self.jm2pdf._new_html_client
+        original_fetch_direct_html = self.jm2pdf._fetch_direct_html
+        try:
+            self.jm2pdf._create_option = lambda: object()
+            self.jm2pdf._new_html_client = lambda _option: client
+
+            def fake_fetch_direct_html(url: str) -> str:
+                direct_urls.append(url)
+                if url == "https://18comic.vip/":
+                    return JM_HOME_RECOMMEND_HTML
+                return MEIMAN_CATEGORY_HTML
+
+            self.jm2pdf._fetch_direct_html = fake_fetch_direct_html
+            html, allow_full_page = self.jm2pdf._fetch_recommendation_source_sync()
+            albums = self.jm2pdf._parse_album_links(html, 10, allow_full_page=allow_full_page)
+        finally:
+            self.jm2pdf._create_option = original_create_option
+            self.jm2pdf._new_html_client = original_new_html_client
+            self.jm2pdf._fetch_direct_html = original_fetch_direct_html
+
+        self.assertEqual(client.paths, ["/"])
+        self.assertEqual(direct_urls, ["https://18comic.vip/"])
+        self.assertFalse(allow_full_page)
+        self.assertEqual([album["id"] for album in albums], ["1437829", "1437530"])
 
     def test_debug_log_follows_promote_page_and_redacts_sensitive_values(self):
         client = FakeRecommendClient()

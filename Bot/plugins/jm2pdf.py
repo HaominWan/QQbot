@@ -3,10 +3,12 @@ import glob
 import html
 import os
 import re
+import ssl
 import unicodedata
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from urllib import request as urlrequest
 
 import jmcomic
 from PIL import Image
@@ -18,6 +20,23 @@ _RECOMMEND_MARKERS = (
     r"C\d+\s*(?:(?:&amp;)|(?:&#38;)|(?:&#x26;)|&|＆){1,2}\s*推荐本本",
     r"C\d+\s*(?:(?:&amp;)|(?:&#38;)|(?:&#x26;)|&|＆){1,2}\s*推薦本本",
 )
+_HOME_PAGE_CANDIDATES = (
+    "/",
+    "https://18comic.vip/",
+    "https://jmcomic-zzz.one/",
+    "https://jm18c-gigu.cc/",
+    "/?page=1",
+)
+_DIRECT_HEADERS = {
+    "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "accept-language": "zh-CN,zh;q=0.9",
+    "cache-control": "no-cache",
+    "pragma": "no-cache",
+    "user-agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+    ),
+}
 _HEADING_TAGS = {"h1", "h2", "h3", "h4", "h5", "h6"}
 _IGNORE_TEXTS = {
     "更多",
@@ -213,6 +232,14 @@ def _response_to_html(response: Any) -> str:
     return str(response)
 
 
+def _fetch_direct_html(url: str) -> str:
+    request = urlrequest.Request(url, headers=_DIRECT_HEADERS)
+    context = ssl._create_unverified_context()
+    with urlrequest.urlopen(request, timeout=25, context=context) as response:
+        charset = response.headers.get_content_charset() or "utf-8"
+        return response.read().decode(charset, errors="ignore")
+
+
 def _new_html_client(option):
     if hasattr(option, "new_jm_client"):
         for kwargs in ({"impl": "html"}, {}):
@@ -228,6 +255,8 @@ def _new_html_client(option):
 
 
 def _fetch_html_from_client(client: Any, path: str) -> str:
+    if re.match(r"https?://", path, flags=re.I):
+        return _fetch_direct_html(path)
     if hasattr(client, "get_jm_html"):
         return _response_to_html(client.get_jm_html(path))
     if hasattr(client, "get_html"):
@@ -237,7 +266,7 @@ def _fetch_html_from_client(client: Any, path: str) -> str:
 
 def _fetch_home_html_sync() -> str:
     client = _new_html_client(_create_option())
-    for path in ("/", "", "/?page=1"):
+    for path in _HOME_PAGE_CANDIDATES:
         try:
             return _fetch_html_from_client(client, path)
         except Exception as exc:
@@ -472,6 +501,35 @@ def _recommend_promote_paths(page_html: str) -> list[str]:
                 seen.add(path)
                 paths.append(path)
     return paths
+
+
+def _meta_content(page_html: str, key: str, *, prop: bool = True) -> str:
+    attr_name = "property" if prop else "name"
+    pattern = (
+        rf"<meta\b(?=[^>]*\b{attr_name}\s*=\s*([\"']){re.escape(key)}\1)"
+        r"(?=[^>]*\bcontent\s*=\s*([\"'])(.*?)\2)[^>]*>"
+    )
+    match = re.search(pattern, page_html, flags=re.I | re.S)
+    return html.unescape(match.group(3)).strip() if match else ""
+
+
+def _canonical_href(page_html: str) -> str:
+    pattern = (
+        r"<link\b(?=[^>]*\brel\s*=\s*([\"'])canonical\1)"
+        r"(?=[^>]*\bhref\s*=\s*([\"'])(.*?)\2)[^>]*>"
+    )
+    match = re.search(pattern, page_html, flags=re.I | re.S)
+    return html.unescape(match.group(3)).strip() if match else ""
+
+
+def _page_identity(page_html: str) -> dict[str, str]:
+    title_match = re.search(r"<title\b[^>]*>(.*?)</title>", page_html, flags=re.I | re.S)
+    return {
+        "title": _clean_text(title_match.group(1)) if title_match else "",
+        "og_title": _meta_content(page_html, "og:title"),
+        "og_url": _meta_content(page_html, "og:url"),
+        "canonical": _canonical_href(page_html),
+    }
 
 
 def _redact_debug_text(text: str) -> str:
@@ -712,7 +770,7 @@ def _enrich_album_details_sync(albums: list[dict[str, Any]]) -> list[dict[str, A
 
 def _fetch_recommendation_source_sync() -> tuple[str, bool]:
     client = _new_html_client(_create_option())
-    pending: list[tuple[str, bool]] = [("/", False), ("", False), ("/?page=1", False)]
+    pending: list[tuple[str, bool]] = [(path, False) for path in _HOME_PAGE_CANDIDATES]
     seen: set[tuple[str, bool]] = set()
     fallback_html = ""
 
@@ -732,6 +790,13 @@ def _fetch_recommendation_source_sync() -> tuple[str, bool]:
 
         if not fallback_html:
             fallback_html = page_html
+
+        identity = _page_identity(_decode_unicode_escapes(page_html))
+        if identity.get("og_url") or identity.get("canonical"):
+            _jm_log(
+                f"recommend identity path={path!r} og_url={identity.get('og_url')!r} "
+                f"canonical={identity.get('canonical')!r}"
+            )
 
         try:
             albums = _parse_album_links(page_html, 1, allow_full_page=allow_full_page, log_missing=False)
@@ -796,7 +861,7 @@ def _write_recommend_debug_log_sync(limit: int = 10, report_path: str | os.PathL
         return str(report_path)
     _write_debug_lines(report_path, lines)
 
-    pending: list[tuple[str, bool]] = [("/", False), ("", False), ("/?page=1", False)]
+    pending: list[tuple[str, bool]] = [(path, False) for path in _HOME_PAGE_CANDIDATES]
     seen: set[tuple[str, bool]] = set()
 
     while pending:
@@ -827,6 +892,10 @@ def _write_recommend_debug_log_sync(limit: int = 10, report_path: str | os.PathL
 
         page_html = _decode_unicode_escapes(page_html)
         lines.append(f"html_length: {len(page_html)}")
+        identity = _page_identity(page_html)
+        for identity_key, identity_value in identity.items():
+            if identity_value:
+                lines.append(f"{identity_key}: {identity_value}")
 
         try:
             marker_matches = _recommend_marker_matches(page_html)
