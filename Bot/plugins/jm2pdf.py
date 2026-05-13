@@ -40,6 +40,8 @@ _HOME_PAGE_CANDIDATES = (
     "/?page=1",
 )
 _MAX_HOME_CANDIDATES = 30
+_JM_HOME_HOST_KEYWORDS = ("18comic", "jmcomic", "jm18c")
+_DIRECT_TIMEOUT = 12
 _DIRECT_HEADERS = {
     "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "accept-language": "zh-CN,zh;q=0.9",
@@ -259,6 +261,11 @@ def _normalize_home_url(domain_or_url: Any) -> str:
     return f"{scheme}://{parsed.netloc}/"
 
 
+def _is_jm_html_home_url(url: str) -> bool:
+    host = urlparse(url).netloc.lower()
+    return any(keyword in host for keyword in _JM_HOME_HOST_KEYWORDS)
+
+
 def _discover_html_home_urls() -> list[str]:
     config = getattr(jmcomic, "JmModuleConfig", None)
     if config is None:
@@ -281,7 +288,7 @@ def _discover_html_home_urls() -> list[str]:
             domains = [domains]
         for domain in domains or []:
             url = _normalize_home_url(domain)
-            if url and url not in seen:
+            if url and _is_jm_html_home_url(url) and url not in seen:
                 seen.add(url)
                 urls.append(url)
 
@@ -304,7 +311,9 @@ def _home_page_candidates() -> list[str]:
         if candidate in {"/", "/?page=1"}:
             continue
         if re.match(r"https?://", candidate, flags=re.I):
-            add(_normalize_home_url(candidate))
+            url = _normalize_home_url(candidate)
+            if _is_jm_html_home_url(url):
+                add(url)
         else:
             add(candidate)
     add("/?page=1")
@@ -339,7 +348,7 @@ def _fetch_direct_html(url: str) -> str:
             response = curl_requests.get(
                 url,
                 headers=headers,
-                timeout=25,
+                timeout=_DIRECT_TIMEOUT,
                 verify=False,
                 impersonate="chrome",
             )
@@ -351,7 +360,7 @@ def _fetch_direct_html(url: str) -> str:
     request = urlrequest.Request(url, headers=headers)
     context = ssl._create_unverified_context()
     try:
-        with urlrequest.urlopen(request, timeout=25, context=context) as response:
+        with urlrequest.urlopen(request, timeout=_DIRECT_TIMEOUT, context=context) as response:
             charset = response.headers.get_content_charset() or "utf-8"
             return response.read().decode(charset, errors="ignore")
     except Exception as exc:
@@ -387,16 +396,10 @@ def _fetch_html_from_client(client: Any, path: str) -> str:
     if not re.match(r"https?://", path, flags=re.I):
         return _fetch_html_via_client(client, path)
 
-    client_error: Exception | None = None
-    try:
-        return _fetch_html_via_client(client, path)
-    except Exception as exc:
-        client_error = exc
-
     try:
         return _fetch_direct_html(path)
     except Exception as exc:
-        raise RuntimeError(f"client absolute fetch failed: {client_error}; direct fetch failed: {exc}") from exc
+        raise RuntimeError(f"direct absolute fetch failed: {exc}") from exc
 
 
 def _fetch_home_html_sync() -> str:

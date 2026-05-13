@@ -213,8 +213,8 @@ class JmRecommendParserTests(unittest.TestCase):
             self.jm2pdf._new_html_client = original_new_html_client
             self.jm2pdf._fetch_direct_html = original_fetch_direct_html
 
-        self.assertEqual(client.paths, ["/", "https://18comic.vip/"])
-        self.assertEqual(direct_urls, [])
+        self.assertEqual(client.paths, ["/"])
+        self.assertEqual(direct_urls, ["https://18comic.vip/"])
         self.assertFalse(allow_full_page)
         self.assertEqual([album["id"] for album in albums], ["1437829", "1437530"])
 
@@ -222,8 +222,12 @@ class JmRecommendParserTests(unittest.TestCase):
         original_config = getattr(self.jm2pdf.jmcomic, "JmModuleConfig", None)
         try:
             self.jm2pdf.jmcomic.JmModuleConfig = types.SimpleNamespace(
-                get_html_domain_all_via_github=lambda: ["new-domain.example", "https://18comic.vip/"],
-                get_html_domain_all=lambda: ["backup-domain.example/path"],
+                get_html_domain_all_via_github=lambda: [
+                    "jmcomic-new.example",
+                    "https://18comic.vip/",
+                    "t.me/hcomic18",
+                ],
+                get_html_domain_all=lambda: ["jm18c-backup.example/path", "jm-88.cc/ZNPJam"],
             )
             candidates = self.jm2pdf._home_page_candidates()
         finally:
@@ -233,8 +237,10 @@ class JmRecommendParserTests(unittest.TestCase):
                 self.jm2pdf.jmcomic.JmModuleConfig = original_config
 
         self.assertEqual(candidates[0], "/")
-        self.assertIn("https://new-domain.example/", candidates)
-        self.assertIn("https://backup-domain.example/", candidates)
+        self.assertIn("https://jmcomic-new.example/", candidates)
+        self.assertIn("https://jm18c-backup.example/", candidates)
+        self.assertNotIn("https://t.me/", candidates)
+        self.assertNotIn("https://jm-88.cc/", candidates)
         self.assertEqual(candidates.count("https://18comic.vip/"), 1)
 
     def test_debug_log_follows_promote_page_and_redacts_sensitive_values(self):
