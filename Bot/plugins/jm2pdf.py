@@ -913,6 +913,7 @@ def _write_recommend_debug_log_sync(limit: int = 10, report_path: str | os.PathL
 
             parsed_normal = _parse_album_links(page_html, limit, log_missing=False)
             parsed_full = _parse_album_links(page_html, limit, allow_full_page=True, log_missing=False)
+            found_recommend_source = bool(parsed_normal or (allow_full_page and parsed_full))
             lines.append(f"parsed_normal_ids: {[album.get('id') for album in parsed_normal]}")
             lines.append(f"parsed_full_page_ids: {[album.get('id') for album in parsed_full]}")
             _jm_log(
@@ -929,6 +930,7 @@ def _write_recommend_debug_log_sync(limit: int = 10, report_path: str | os.PathL
                     lines.append(_debug_snippet(page_html, nearby_match.start(), radius=500))
         except Exception as exc:
             promote_paths = []
+            found_recommend_source = False
             lines.append(f"parse_error: {type(exc).__name__}: {exc}")
             _jm_log(f"debug parse error path={path!r}: {type(exc).__name__}: {exc}")
 
@@ -937,6 +939,8 @@ def _write_recommend_debug_log_sync(limit: int = 10, report_path: str | os.PathL
                 pending.insert(0, (promote_path, True))
 
         _write_debug_lines(report_path, lines)
+        if found_recommend_source:
+            break
 
     return str(report_path)
 
