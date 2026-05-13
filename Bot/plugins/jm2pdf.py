@@ -44,6 +44,10 @@ _CATEGORY_TITLES = {
 }
 
 
+def _jm_log(message: str) -> None:
+    print(f"[JM] {message}", flush=True)
+
+
 def _natural_key(path):
     parts = re.split(r"(\d+)", os.path.normpath(path).replace(os.sep, "/"))
     return [int(part) if part.isdigit() else part.lower() for part in parts]
@@ -688,20 +692,28 @@ def _fetch_recommendation_source_sync() -> tuple[str, bool]:
         seen.add(key)
 
         try:
+            _jm_log(f"recommend fetch path={path!r} allow_full_page={allow_full_page}")
             page_html = _fetch_html_from_client(client, path)
         except Exception as exc:
-            print(f"[JM] Failed to fetch recommendation page {path!r}: {exc}")
+            _jm_log(f"Failed to fetch recommendation page {path!r}: {exc}")
             continue
 
         if not fallback_html:
             fallback_html = page_html
 
         albums = _parse_album_links(page_html, 1, allow_full_page=allow_full_page, log_missing=False)
+        _jm_log(
+            f"recommend path={path!r} html_len={len(page_html)} "
+            f"parsed_ids={[album.get('id') for album in albums]}"
+        )
         if albums:
             return page_html, allow_full_page
 
         if not allow_full_page:
-            for promote_path in reversed(_recommend_promote_paths(page_html)):
+            promote_paths = _recommend_promote_paths(page_html)
+            if promote_paths:
+                _jm_log(f"recommend promote paths from {path!r}: {promote_paths}")
+            for promote_path in reversed(promote_paths):
                 pending.insert(0, (promote_path, True))
 
     if fallback_html:
@@ -728,6 +740,7 @@ def _append_debug_lines(report_path: Path, lines: list[str]) -> None:
 def _write_recommend_debug_log_sync(limit: int = 10, report_path: str | os.PathLike[str] | None = None) -> str:
     limit = max(1, min(int(limit), 20))
     report_path = Path(report_path) if report_path is not None else _recommend_debug_report_path()
+    _jm_log(f"debug export start report={report_path}")
 
     lines: list[str] = [
         "JM recommend debug report",
@@ -765,6 +778,7 @@ def _write_recommend_debug_log_sync(limit: int = 10, report_path: str | os.PathL
                 f"allow_full_page: {allow_full_page}",
             ]
         )
+        _jm_log(f"debug fetch path={path!r} allow_full_page={allow_full_page}")
         _write_debug_lines(report_path, lines)
 
         try:
@@ -772,6 +786,7 @@ def _write_recommend_debug_log_sync(limit: int = 10, report_path: str | os.PathL
         except Exception as exc:
             lines.append(f"fetch_error: {type(exc).__name__}: {exc}")
             _write_debug_lines(report_path, lines)
+            _jm_log(f"debug fetch error path={path!r}: {type(exc).__name__}: {exc}")
             continue
 
         page_html = _decode_unicode_escapes(page_html)
@@ -794,6 +809,11 @@ def _write_recommend_debug_log_sync(limit: int = 10, report_path: str | os.PathL
         parsed_full = _parse_album_links(page_html, limit, allow_full_page=True, log_missing=False)
         lines.append(f"parsed_normal_ids: {[album.get('id') for album in parsed_normal]}")
         lines.append(f"parsed_full_page_ids: {[album.get('id') for album in parsed_full]}")
+        _jm_log(
+            f"debug path={path!r} html_len={len(page_html)} markers={len(marker_matches)} "
+            f"promotes={promote_paths} normal_ids={[album.get('id') for album in parsed_normal]} "
+            f"full_ids={[album.get('id') for album in parsed_full]}"
+        )
 
         if not marker_matches:
             nearby_matches = _debug_nearby_matches(page_html)
@@ -819,6 +839,7 @@ async def export_recommend_debug_log(limit: int = 10, timeout: float = 45.0) -> 
             timeout=timeout,
         )
     except asyncio.TimeoutError:
+        _jm_log(f"debug export timeout after {timeout:.0f}s report={report_path}")
         _append_debug_lines(
             report_path,
             [
