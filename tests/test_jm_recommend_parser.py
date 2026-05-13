@@ -137,6 +137,8 @@ class FakeCategoryClient:
 
     def get_jm_html(self, path: str) -> str:
         self.paths.append(path)
+        if path == "https://18comic.vip/":
+            return JM_HOME_RECOMMEND_HTML
         return MEIMAN_CATEGORY_HTML
 
 
@@ -187,7 +189,7 @@ class JmRecommendParserTests(unittest.TestCase):
         self.assertEqual([album["id"] for album in albums], ["1439001", "1439002"])
         self.assertEqual(albums[0]["tags"], ["中文"])
 
-    def test_fetch_tries_direct_homepage_when_jmcomic_root_returns_category_page(self):
+    def test_fetch_tries_absolute_homepage_when_jmcomic_root_returns_category_page(self):
         client = FakeCategoryClient()
         direct_urls: list[str] = []
         original_create_option = self.jm2pdf._create_option
@@ -211,8 +213,8 @@ class JmRecommendParserTests(unittest.TestCase):
             self.jm2pdf._new_html_client = original_new_html_client
             self.jm2pdf._fetch_direct_html = original_fetch_direct_html
 
-        self.assertEqual(client.paths, ["/"])
-        self.assertEqual(direct_urls, ["https://18comic.vip/"])
+        self.assertEqual(client.paths, ["/", "https://18comic.vip/"])
+        self.assertEqual(direct_urls, [])
         self.assertFalse(allow_full_page)
         self.assertEqual([album["id"] for album in albums], ["1437829", "1437530"])
 

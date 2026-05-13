@@ -254,14 +254,28 @@ def _new_html_client(option):
     raise RuntimeError("当前 jmcomic 版本不支持 HTML 客户端")
 
 
-def _fetch_html_from_client(client: Any, path: str) -> str:
-    if re.match(r"https?://", path, flags=re.I):
-        return _fetch_direct_html(path)
+def _fetch_html_via_client(client: Any, path: str) -> str:
     if hasattr(client, "get_jm_html"):
         return _response_to_html(client.get_jm_html(path))
     if hasattr(client, "get_html"):
         return _response_to_html(client.get_html(path))
     raise RuntimeError("当前 jmcomic HTML 客户端不支持页面抓取")
+
+
+def _fetch_html_from_client(client: Any, path: str) -> str:
+    if not re.match(r"https?://", path, flags=re.I):
+        return _fetch_html_via_client(client, path)
+
+    client_error: Exception | None = None
+    try:
+        return _fetch_html_via_client(client, path)
+    except Exception as exc:
+        client_error = exc
+
+    try:
+        return _fetch_direct_html(path)
+    except Exception as exc:
+        raise RuntimeError(f"client absolute fetch failed: {client_error}; direct fetch failed: {exc}") from exc
 
 
 def _fetch_home_html_sync() -> str:
