@@ -128,6 +128,12 @@ class JmRecommendParserTests(unittest.TestCase):
         self.assertIn("先生と明日香", albums[0]["title"])
         self.assertNotIn("1435728", [album["id"] for album in albums])
 
+    def test_dom_parser_skips_html_comment_nodes(self):
+        html = f"<main><!-- ad marker -->{JM_HOME_RECOMMEND_HTML}<!-- trailing --></main>"
+        albums = self.jm2pdf._parse_album_links(html, 10)
+
+        self.assertEqual([album["id"] for album in albums], ["1437829", "1437530"])
+
     def test_regex_fallback_accepts_double_ampersand_simplified_marker(self):
         original_dom_parser = self.jm2pdf._recommend_section_by_dom
         self.jm2pdf._recommend_section_by_dom = lambda _html, **_kwargs: ""

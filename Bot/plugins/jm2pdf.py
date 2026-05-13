@@ -266,6 +266,8 @@ def _bounded_section(page_html: str, start: int) -> str:
 
 
 def _html_from_element(element: Any) -> str:
+    if not _is_dom_element(element):
+        return ""
     try:
         from lxml import html as lxml_html
 
@@ -274,11 +276,25 @@ def _html_from_element(element: Any) -> str:
         return ""
 
 
+def _is_dom_element(element: Any) -> bool:
+    return isinstance(getattr(element, "tag", None), str)
+
+
+def _safe_text_content(element: Any) -> str:
+    if not _is_dom_element(element) or not hasattr(element, "text_content"):
+        return ""
+    try:
+        return element.text_content()
+    except Exception:
+        return ""
+
+
 def _next_sibling_section(element: Any) -> str:
     fragments = [_html_from_element(element)]
     sibling = element.getnext()
     while sibling is not None:
-        tag = str(getattr(sibling, "tag", "")).lower()
+        tag = getattr(sibling, "tag", "")
+        tag = tag.lower() if isinstance(tag, str) else ""
         if tag in {"section", *_HEADING_TAGS}:
             break
         fragments.append(_html_from_element(sibling))
@@ -287,16 +303,24 @@ def _next_sibling_section(element: Any) -> str:
 
 
 def _classes_of(element: Any) -> set[str]:
+    if not _is_dom_element(element):
+        return set()
     classes = element.get("class", "") if hasattr(element, "get") else ""
     return {class_name.strip().lower() for class_name in str(classes).split() if class_name.strip()}
 
 
 def _looks_like_heading_container(element: Any) -> bool:
-    tag = str(getattr(element, "tag", "")).lower()
+    if not _is_dom_element(element):
+        return False
+    tag = getattr(element, "tag", "")
+    tag = tag.lower() if isinstance(tag, str) else ""
     classes = _classes_of(element)
     if tag in _HEADING_TAGS or "talk-title" in classes:
         return True
-    return bool(element.xpath(".//*[contains(concat(' ', normalize-space(@class), ' '), ' talk-title ')]"))
+    try:
+        return bool(element.xpath(".//*[contains(concat(' ', normalize-space(@class), ' '), ' talk-title ')]"))
+    except Exception:
+        return False
 
 
 def _row_following_heading_section(element: Any) -> str:
@@ -304,7 +328,8 @@ def _row_following_heading_section(element: Any) -> str:
     current = element
     depth = 0
     while current is not None and depth < 8:
-        tag = str(getattr(current, "tag", "")).lower()
+        tag = getattr(current, "tag", "")
+        tag = tag.lower() if isinstance(tag, str) else ""
         classes = _classes_of(current)
         if tag == "div" and "row" in classes and _looks_like_heading_container(current):
             fragments = [_html_from_element(current)]
@@ -337,13 +362,20 @@ def _recommend_section_by_dom(page_html: str, *, log_errors: bool = True) -> str
 
     candidates: list[tuple[int, str]] = []
     for element in root.iter():
-        text = element.text_content()
+        if not _is_dom_element(element):
+            continue
+        text = _safe_text_content(element)
         if not _is_c107_recommend_text(text):
             continue
-        if any(_is_c107_recommend_text(child.text_content()) for child in element.iterdescendants()):
+        if any(
+            _is_c107_recommend_text(_safe_text_content(child))
+            for child in element.iterdescendants()
+            if _is_dom_element(child)
+        ):
             continue
 
-        tag = str(getattr(element, "tag", "")).lower()
+        tag = getattr(element, "tag", "")
+        tag = tag.lower() if isinstance(tag, str) else ""
         fragments = [
             (-5, _row_following_heading_section(element)),
             (0, _next_sibling_section(element)),
@@ -701,7 +733,11 @@ def _fetch_recommendation_source_sync() -> tuple[str, bool]:
         if not fallback_html:
             fallback_html = page_html
 
-        albums = _parse_album_links(page_html, 1, allow_full_page=allow_full_page, log_missing=False)
+        try:
+            albums = _parse_album_links(page_html, 1, allow_full_page=allow_full_page, log_missing=False)
+        except Exception as exc:
+            _jm_log(f"recommend parse error path={path!r}: {type(exc).__name__}: {exc}")
+            albums = []
         _jm_log(
             f"recommend path={path!r} html_len={len(page_html)} "
             f"parsed_ids={[album.get('id') for album in albums]}"
@@ -792,35 +828,40 @@ def _write_recommend_debug_log_sync(limit: int = 10, report_path: str | os.PathL
         page_html = _decode_unicode_escapes(page_html)
         lines.append(f"html_length: {len(page_html)}")
 
-        marker_matches = _recommend_marker_matches(page_html)
-        lines.append(f"recommend_marker_count: {len(marker_matches)}")
-        for index, marker_match in enumerate(marker_matches[:5], start=1):
-            lines.append(f"marker_{index}: {marker_match.group(0)!r} at {marker_match.start()}")
-            lines.append(_debug_snippet(page_html, marker_match.start(), radius=900))
+        try:
+            marker_matches = _recommend_marker_matches(page_html)
+            lines.append(f"recommend_marker_count: {len(marker_matches)}")
+            for index, marker_match in enumerate(marker_matches[:5], start=1):
+                lines.append(f"marker_{index}: {marker_match.group(0)!r} at {marker_match.start()}")
+                lines.append(_debug_snippet(page_html, marker_match.start(), radius=900))
 
-        promote_paths = _recommend_promote_paths(page_html)
-        lines.append(f"recommend_promote_paths: {promote_paths or []}")
+            promote_paths = _recommend_promote_paths(page_html)
+            lines.append(f"recommend_promote_paths: {promote_paths or []}")
 
-        section = _recommend_section(page_html, log_missing=False)
-        lines.append(f"recommend_section_length: {len(section)}")
-        lines.append(f"recommend_section_album_ids: {_album_ids_in_fragment(section)}")
+            section = _recommend_section(page_html, log_missing=False)
+            lines.append(f"recommend_section_length: {len(section)}")
+            lines.append(f"recommend_section_album_ids: {_album_ids_in_fragment(section)}")
 
-        parsed_normal = _parse_album_links(page_html, limit, log_missing=False)
-        parsed_full = _parse_album_links(page_html, limit, allow_full_page=True, log_missing=False)
-        lines.append(f"parsed_normal_ids: {[album.get('id') for album in parsed_normal]}")
-        lines.append(f"parsed_full_page_ids: {[album.get('id') for album in parsed_full]}")
-        _jm_log(
-            f"debug path={path!r} html_len={len(page_html)} markers={len(marker_matches)} "
-            f"promotes={promote_paths} normal_ids={[album.get('id') for album in parsed_normal]} "
-            f"full_ids={[album.get('id') for album in parsed_full]}"
-        )
+            parsed_normal = _parse_album_links(page_html, limit, log_missing=False)
+            parsed_full = _parse_album_links(page_html, limit, allow_full_page=True, log_missing=False)
+            lines.append(f"parsed_normal_ids: {[album.get('id') for album in parsed_normal]}")
+            lines.append(f"parsed_full_page_ids: {[album.get('id') for album in parsed_full]}")
+            _jm_log(
+                f"debug path={path!r} html_len={len(page_html)} markers={len(marker_matches)} "
+                f"promotes={promote_paths} normal_ids={[album.get('id') for album in parsed_normal]} "
+                f"full_ids={[album.get('id') for album in parsed_full]}"
+            )
 
-        if not marker_matches:
-            nearby_matches = _debug_nearby_matches(page_html)
-            lines.append(f"nearby_keyword_count: {len(nearby_matches)}")
-            for index, nearby_match in enumerate(nearby_matches[:8], start=1):
-                lines.append(f"nearby_{index}: {nearby_match.group(0)!r} at {nearby_match.start()}")
-                lines.append(_debug_snippet(page_html, nearby_match.start(), radius=500))
+            if not marker_matches:
+                nearby_matches = _debug_nearby_matches(page_html)
+                lines.append(f"nearby_keyword_count: {len(nearby_matches)}")
+                for index, nearby_match in enumerate(nearby_matches[:8], start=1):
+                    lines.append(f"nearby_{index}: {nearby_match.group(0)!r} at {nearby_match.start()}")
+                    lines.append(_debug_snippet(page_html, nearby_match.start(), radius=500))
+        except Exception as exc:
+            promote_paths = []
+            lines.append(f"parse_error: {type(exc).__name__}: {exc}")
+            _jm_log(f"debug parse error path={path!r}: {type(exc).__name__}: {exc}")
 
         if not allow_full_page:
             for promote_path in reversed(promote_paths):
