@@ -3,6 +3,7 @@ groq
 websockets
 aiohttp
 requests
+curl_cffi
 httpx
 chardet
 typst

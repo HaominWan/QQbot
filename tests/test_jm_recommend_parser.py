@@ -218,6 +218,25 @@ class JmRecommendParserTests(unittest.TestCase):
         self.assertFalse(allow_full_page)
         self.assertEqual([album["id"] for album in albums], ["1437829", "1437530"])
 
+    def test_home_candidates_include_domains_discovered_by_jmcomic_config(self):
+        original_config = getattr(self.jm2pdf.jmcomic, "JmModuleConfig", None)
+        try:
+            self.jm2pdf.jmcomic.JmModuleConfig = types.SimpleNamespace(
+                get_html_domain_all_via_github=lambda: ["new-domain.example", "https://18comic.vip/"],
+                get_html_domain_all=lambda: ["backup-domain.example/path"],
+            )
+            candidates = self.jm2pdf._home_page_candidates()
+        finally:
+            if original_config is None:
+                delattr(self.jm2pdf.jmcomic, "JmModuleConfig")
+            else:
+                self.jm2pdf.jmcomic.JmModuleConfig = original_config
+
+        self.assertEqual(candidates[0], "/")
+        self.assertIn("https://new-domain.example/", candidates)
+        self.assertIn("https://backup-domain.example/", candidates)
+        self.assertEqual(candidates.count("https://18comic.vip/"), 1)
+
     def test_debug_log_follows_promote_page_and_redacts_sensitive_values(self):
         client = FakeRecommendClient()
         original_create_option = self.jm2pdf._create_option

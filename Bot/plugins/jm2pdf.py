@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 from urllib import request as urlrequest
+from urllib.parse import urlparse
 
 import jmcomic
 from PIL import Image
@@ -23,10 +24,22 @@ _RECOMMEND_MARKERS = (
 _HOME_PAGE_CANDIDATES = (
     "/",
     "https://18comic.vip/",
+    "https://jmcomic.me/",
     "https://jmcomic-zzz.one/",
+    "https://jmcomic-zzz.org/",
+    "https://18comic.ink/",
+    "https://jm18c-kimi.cc/",
+    "https://jm18c-kimi.me/",
     "https://jm18c-gigu.cc/",
+    "https://jm18c-gigu.me/",
+    "https://jm18c-gigu.club/",
+    "https://jmcomic-dofu.net/",
+    "https://jmcomic-dofu.club/",
+    "https://jmcomic-dofu.me/",
+    "https://jmcomic-yuii.cc/",
     "/?page=1",
 )
+_MAX_HOME_CANDIDATES = 30
 _DIRECT_HEADERS = {
     "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "accept-language": "zh-CN,zh;q=0.9",
@@ -232,12 +245,120 @@ def _response_to_html(response: Any) -> str:
     return str(response)
 
 
+def _normalize_home_url(domain_or_url: Any) -> str:
+    text = str(domain_or_url or "").strip()
+    if not text:
+        return ""
+    if not re.match(r"https?://", text, flags=re.I):
+        text = "https://" + text.lstrip("/")
+
+    parsed = urlparse(text)
+    if not parsed.netloc:
+        return ""
+    scheme = parsed.scheme or "https"
+    return f"{scheme}://{parsed.netloc}/"
+
+
+def _discover_html_home_urls() -> list[str]:
+    config = getattr(jmcomic, "JmModuleConfig", None)
+    if config is None:
+        return []
+
+    urls: list[str] = []
+    seen: set[str] = set()
+    for method_name in ("get_html_domain_all_via_github", "get_html_domain_all"):
+        method = getattr(config, method_name, None)
+        if not callable(method):
+            continue
+
+        try:
+            domains = method()
+        except Exception as exc:
+            _jm_log(f"domain discovery {method_name} failed: {type(exc).__name__}: {exc}")
+            continue
+
+        if isinstance(domains, str):
+            domains = [domains]
+        for domain in domains or []:
+            url = _normalize_home_url(domain)
+            if url and url not in seen:
+                seen.add(url)
+                urls.append(url)
+
+    return urls
+
+
+def _home_page_candidates() -> list[str]:
+    candidates: list[str] = []
+    seen: set[str] = set()
+
+    def add(candidate: str) -> None:
+        if candidate and candidate not in seen:
+            seen.add(candidate)
+            candidates.append(candidate)
+
+    add("/")
+    for url in _discover_html_home_urls():
+        add(url)
+    for candidate in _HOME_PAGE_CANDIDATES:
+        if candidate in {"/", "/?page=1"}:
+            continue
+        if re.match(r"https?://", candidate, flags=re.I):
+            add(_normalize_home_url(candidate))
+        else:
+            add(candidate)
+    add("/?page=1")
+    return candidates[:_MAX_HOME_CANDIDATES]
+
+
+def _direct_headers_for_url(url: str) -> dict[str, str]:
+    headers = dict(_DIRECT_HEADERS)
+    parsed = urlparse(url)
+    if parsed.netloc:
+        origin = f"{parsed.scheme or 'https'}://{parsed.netloc}"
+        headers.update(
+            {
+                "host": parsed.netloc,
+                "origin": origin,
+                "referer": origin + "/",
+            }
+        )
+    return headers
+
+
 def _fetch_direct_html(url: str) -> str:
-    request = urlrequest.Request(url, headers=_DIRECT_HEADERS)
+    headers = _direct_headers_for_url(url)
+    curl_error: Exception | None = None
+
+    try:
+        from curl_cffi import requests as curl_requests
+    except Exception as exc:
+        curl_error = exc
+    else:
+        try:
+            response = curl_requests.get(
+                url,
+                headers=headers,
+                timeout=25,
+                verify=False,
+                impersonate="chrome",
+            )
+            response.raise_for_status()
+            return response.text
+        except Exception as exc:
+            curl_error = exc
+
+    request = urlrequest.Request(url, headers=headers)
     context = ssl._create_unverified_context()
-    with urlrequest.urlopen(request, timeout=25, context=context) as response:
-        charset = response.headers.get_content_charset() or "utf-8"
-        return response.read().decode(charset, errors="ignore")
+    try:
+        with urlrequest.urlopen(request, timeout=25, context=context) as response:
+            charset = response.headers.get_content_charset() or "utf-8"
+            return response.read().decode(charset, errors="ignore")
+    except Exception as exc:
+        if curl_error is not None:
+            raise RuntimeError(f"curl_cffi failed or unavailable: {curl_error}; urllib failed: {exc}") from exc
+        raise
+
 
 
 def _new_html_client(option):
@@ -280,7 +401,7 @@ def _fetch_html_from_client(client: Any, path: str) -> str:
 
 def _fetch_home_html_sync() -> str:
     client = _new_html_client(_create_option())
-    for path in _HOME_PAGE_CANDIDATES:
+    for path in _home_page_candidates():
         try:
             return _fetch_html_from_client(client, path)
         except Exception as exc:
@@ -784,7 +905,9 @@ def _enrich_album_details_sync(albums: list[dict[str, Any]]) -> list[dict[str, A
 
 def _fetch_recommendation_source_sync() -> tuple[str, bool]:
     client = _new_html_client(_create_option())
-    pending: list[tuple[str, bool]] = [(path, False) for path in _HOME_PAGE_CANDIDATES]
+    home_candidates = _home_page_candidates()
+    _jm_log(f"recommend home candidates={home_candidates}")
+    pending: list[tuple[str, bool]] = [(path, False) for path in home_candidates]
     seen: set[tuple[str, bool]] = set()
     fallback_html = ""
 
@@ -875,7 +998,10 @@ def _write_recommend_debug_log_sync(limit: int = 10, report_path: str | os.PathL
         return str(report_path)
     _write_debug_lines(report_path, lines)
 
-    pending: list[tuple[str, bool]] = [(path, False) for path in _HOME_PAGE_CANDIDATES]
+    home_candidates = _home_page_candidates()
+    lines.append(f"home_candidates: {home_candidates}")
+    _write_debug_lines(report_path, lines)
+    pending: list[tuple[str, bool]] = [(path, False) for path in home_candidates]
     seen: set[tuple[str, bool]] = set()
 
     while pending:
