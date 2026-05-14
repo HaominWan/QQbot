@@ -258,6 +258,33 @@ class JmRecommendParserTests(unittest.TestCase):
         self.assertTrue(allow_full_page)
         self.assertEqual([album["id"] for album in albums], ["1439001", "1439002"])
 
+    def test_fetch_uses_direct_promote_page_when_client_creation_fails(self):
+        direct_urls: list[str] = []
+        original_create_option = self.jm2pdf._create_option
+        original_new_html_client = self.jm2pdf._new_html_client
+        original_fetch_direct_html = self.jm2pdf._fetch_direct_html
+        try:
+            self.jm2pdf._create_option = lambda: object()
+            self.jm2pdf._new_html_client = lambda _option: (_ for _ in ()).throw(RuntimeError("tls boom"))
+
+            def fake_fetch_direct_html(url: str) -> str:
+                direct_urls.append(url)
+                if url.endswith("/promotes/29"):
+                    return PROMOTE_LIST_HTML
+                return MEIMAN_CATEGORY_HTML
+
+            self.jm2pdf._fetch_direct_html = fake_fetch_direct_html
+            html, allow_full_page = self.jm2pdf._fetch_recommendation_source_sync()
+            albums = self.jm2pdf._parse_album_links(html, 10, allow_full_page=allow_full_page)
+        finally:
+            self.jm2pdf._create_option = original_create_option
+            self.jm2pdf._new_html_client = original_new_html_client
+            self.jm2pdf._fetch_direct_html = original_fetch_direct_html
+
+        self.assertIn("https://18comic.vip/promotes/29", direct_urls)
+        self.assertTrue(allow_full_page)
+        self.assertEqual([album["id"] for album in albums], ["1439001", "1439002"])
+
     def test_home_candidates_include_domains_discovered_by_jmcomic_config(self):
         original_config = getattr(self.jm2pdf.jmcomic, "JmModuleConfig", None)
         try:
@@ -306,6 +333,39 @@ class JmRecommendParserTests(unittest.TestCase):
         self.assertIn("parsed_full_page_ids: ['1439001', '1439002']", report)
         self.assertIn('value="<redacted>"', report)
         self.assertNotIn("secret-password", report)
+
+    def test_debug_log_continues_when_client_creation_fails(self):
+        direct_urls: list[str] = []
+        original_create_option = self.jm2pdf._create_option
+        original_new_html_client = self.jm2pdf._new_html_client
+        original_fetch_direct_html = self.jm2pdf._fetch_direct_html
+        original_tmp_dir = self.jm2pdf._TMP_DIR
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                self.jm2pdf._TMP_DIR = Path(tmp)
+                self.jm2pdf._create_option = lambda: object()
+                self.jm2pdf._new_html_client = lambda _option: (_ for _ in ()).throw(RuntimeError("tls boom"))
+
+                def fake_fetch_direct_html(url: str) -> str:
+                    direct_urls.append(url)
+                    if url.endswith("/promotes/29"):
+                        return PROMOTE_LIST_HTML
+                    return MEIMAN_CATEGORY_HTML
+
+                self.jm2pdf._fetch_direct_html = fake_fetch_direct_html
+                report_path = Path(self.jm2pdf._write_recommend_debug_log_sync())
+                report = report_path.read_text(encoding="utf-8")
+        finally:
+            self.jm2pdf._TMP_DIR = original_tmp_dir
+            self.jm2pdf._create_option = original_create_option
+            self.jm2pdf._new_html_client = original_new_html_client
+            self.jm2pdf._fetch_direct_html = original_fetch_direct_html
+
+        self.assertIn("client_create_error: RuntimeError: tls boom", report)
+        self.assertIn("client_mode: direct-only fallback", report)
+        self.assertIn("path: 'https://18comic.vip/promotes/29'", report)
+        self.assertIn("parsed_full_page_ids: ['1439001', '1439002']", report)
+        self.assertIn("https://18comic.vip/promotes/29", direct_urls)
 
     def test_debug_export_timeout_returns_partial_report_path(self):
         original_tmp_dir = self.jm2pdf._TMP_DIR

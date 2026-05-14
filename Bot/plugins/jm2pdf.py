@@ -412,14 +412,24 @@ def _fetch_html_via_client(client: Any, path: str) -> str:
     raise RuntimeError("当前 jmcomic HTML 客户端不支持页面抓取")
 
 
-def _fetch_html_from_client(client: Any, path: str) -> str:
+def _fetch_html_from_client(client: Any | None, path: str) -> str:
     if not re.match(r"https?://", path, flags=re.I):
+        if client is None:
+            raise RuntimeError("JM HTML client unavailable for relative fetch")
         return _fetch_html_via_client(client, path)
 
     try:
         return _fetch_direct_html(path)
     except Exception as exc:
         raise RuntimeError(f"direct absolute fetch failed: {exc}") from exc
+
+
+def _try_new_html_client(context: str) -> Any | None:
+    try:
+        return _new_html_client(_create_option())
+    except Exception as exc:
+        _jm_log(f"{context} client unavailable, using direct-only fallback: {type(exc).__name__}: {exc}")
+        return None
 
 
 def _fetch_home_html_sync() -> str:
@@ -927,7 +937,7 @@ def _enrich_album_details_sync(albums: list[dict[str, Any]]) -> list[dict[str, A
 
 
 def _fetch_recommendation_source_sync() -> tuple[str, bool]:
-    client = _new_html_client(_create_option())
+    client = _try_new_html_client("recommend")
     home_candidates = _home_page_candidates()
     _jm_log(f"recommend home candidates={home_candidates}")
     pending = _recommend_initial_queue(home_candidates)
@@ -1011,14 +1021,14 @@ def _write_recommend_debug_log_sync(limit: int = 10, report_path: str | os.PathL
     ]
     _write_debug_lines(report_path, lines)
 
+    client: Any | None = None
     try:
         option = _create_option()
         client = _new_html_client(option)
         lines.append(f"client_type: {type(client).__module__}.{type(client).__name__}")
     except Exception as exc:
         lines.append(f"client_create_error: {type(exc).__name__}: {exc}")
-        _write_debug_lines(report_path, lines)
-        return str(report_path)
+        lines.append("client_mode: direct-only fallback")
     _write_debug_lines(report_path, lines)
 
     home_candidates = _home_page_candidates()
