@@ -12,6 +12,7 @@ imgkit
 pymdown-extensions
 google-genai
 Pillow
+pypdf
 emoji
 aiofiles
 lxml

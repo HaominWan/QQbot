@@ -94,6 +94,41 @@ def _create_option():
     return jmcomic.create_option_by_file(str(option_path))
 
 
+def pdf_password_for_code(code: Any) -> str:
+    match = re.search(r"\d+", str(code or ""))
+    return match.group(0) if match else str(code or "")
+
+
+def _encrypt_pdf(pdf_path: Path, password: str) -> None:
+    try:
+        from pypdf import PdfReader, PdfWriter
+    except ImportError:
+        from PyPDF2 import PdfReader, PdfWriter
+
+    reader = PdfReader(str(pdf_path))
+    writer = PdfWriter()
+    for page in reader.pages:
+        writer.add_page(page)
+
+    metadata = getattr(reader, "metadata", None)
+    if metadata:
+        writer.add_metadata({str(key): str(value) for key, value in metadata.items() if value is not None})
+
+    try:
+        writer.encrypt(user_password=password, owner_password=password)
+    except TypeError:
+        writer.encrypt(user_pwd=password, owner_pwd=password)
+
+    encrypted_path = pdf_path.with_suffix(pdf_path.suffix + ".encrypted")
+    try:
+        with encrypted_path.open("wb") as file:
+            writer.write(file)
+        os.replace(encrypted_path, pdf_path)
+    finally:
+        if encrypted_path.exists():
+            encrypted_path.unlink()
+
+
 async def get_pdf(code):
     temp_dir = _TMP_DIR / str(code)
     pdf_name = temp_dir / f"{code}.pdf"
@@ -143,6 +178,16 @@ async def get_pdf(code):
     for img in images:
         img.close()
 
+    pdf_password = pdf_password_for_code(code)
+    try:
+        _encrypt_pdf(pdf_name, pdf_password)
+    except Exception as exc:
+        print(f"[ERROR] Failed to encrypt PDF {pdf_name}: {exc}")
+        if pdf_name.exists():
+            pdf_name.unlink()
+        return 0
+
+    print(f"[INFO] PDF password: {pdf_password}")
     print(f"[SUCCESS] PDF generated: {pdf_name}")
     return str(pdf_name)
 

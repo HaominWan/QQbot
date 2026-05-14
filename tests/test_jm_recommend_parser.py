@@ -158,6 +158,59 @@ class JmRecommendParserTests(unittest.TestCase):
     def setUpClass(cls):
         cls.jm2pdf = load_jm2pdf()
 
+    def test_pdf_password_uses_jm_digits(self):
+        self.assertEqual(self.jm2pdf.pdf_password_for_code("350234"), "350234")
+        self.assertEqual(self.jm2pdf.pdf_password_for_code("jm350234"), "350234")
+        self.assertEqual(self.jm2pdf.pdf_password_for_code("JM350234"), "350234")
+
+    def test_encrypt_pdf_replaces_plain_file_with_password_protected_output(self):
+        writer_instances = []
+
+        class FakeReader:
+            def __init__(self, _path):
+                self.pages = ["page-1", "page-2"]
+                self.metadata = {"/Title": "Plain PDF"}
+
+        class FakeWriter:
+            def __init__(self):
+                self.pages = []
+                self.metadata = {}
+                self.passwords = None
+                writer_instances.append(self)
+
+            def add_page(self, page):
+                self.pages.append(page)
+
+            def add_metadata(self, metadata):
+                self.metadata.update(metadata)
+
+            def encrypt(self, user_password, owner_password):
+                self.passwords = (user_password, owner_password)
+
+            def write(self, file):
+                file.write(b"encrypted-pdf")
+
+        fake_pypdf = types.ModuleType("pypdf")
+        fake_pypdf.PdfReader = FakeReader
+        fake_pypdf.PdfWriter = FakeWriter
+        original_pypdf = sys.modules.get("pypdf")
+        sys.modules["pypdf"] = fake_pypdf
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                pdf_path = Path(tmp) / "350234.pdf"
+                pdf_path.write_bytes(b"plain-pdf")
+                self.jm2pdf._encrypt_pdf(pdf_path, "350234")
+
+                self.assertEqual(pdf_path.read_bytes(), b"encrypted-pdf")
+                self.assertEqual(writer_instances[0].pages, ["page-1", "page-2"])
+                self.assertEqual(writer_instances[0].metadata, {"/Title": "Plain PDF"})
+                self.assertEqual(writer_instances[0].passwords, ("350234", "350234"))
+        finally:
+            if original_pypdf is None:
+                sys.modules.pop("pypdf", None)
+            else:
+                sys.modules["pypdf"] = original_pypdf
+
     def test_parses_homepage_c107_recommendation_row(self):
         albums = self.jm2pdf._parse_album_links(JM_HOME_RECOMMEND_HTML, 10)
 

@@ -668,6 +668,7 @@ class CommandHandler:
             await self._send_group_text(ws, group_id, f"翻了个遍没找到 {command_content}，编号没搞错吧？还是被和谐了？")
             return
 
+        pdf_password = jm2pdf.pdf_password_for_code(command_content)
         try:
             await self.bot_interfaces["upload_group_file"](
                 ws,
@@ -676,6 +677,7 @@ class CommandHandler:
                 f"{command_content}.pdf",
                 "/",
             )
+            await self._send_group_text(ws, group_id, f"PDF 密码：{pdf_password}")
             await self._send_group_text(ws, group_id, "Get Da★Ze☆~ 少🦌一点哦，已发至群文件，好好欣赏哦")
         finally:
             self._cleanup_jm_tmp(jm_pdf, command_content)
@@ -696,6 +698,7 @@ class CommandHandler:
             await self._send_private_text(ws, user_id, f"翻了个遍没找到 {command_content}，编号没搞错吧？还是被和谐了？")
             return
 
+        pdf_password = jm2pdf.pdf_password_for_code(command_content)
         try:
             await self.bot_interfaces["upload_private_file"](
                 ws,
@@ -703,6 +706,7 @@ class CommandHandler:
                 os.path.abspath(jm_pdf),
                 f"{command_content}.pdf",
             )
+            await self._send_private_text(ws, user_id, f"PDF 密码：{pdf_password}")
             await self._send_private_text(ws, user_id, "Get Da★Ze☆~ 少🦌一点哦，发过去了，好好欣赏哦")
         finally:
             self._cleanup_jm_tmp(jm_pdf, command_content)
