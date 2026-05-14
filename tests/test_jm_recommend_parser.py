@@ -211,6 +211,28 @@ class JmRecommendParserTests(unittest.TestCase):
             else:
                 sys.modules["pypdf"] = original_pypdf
 
+    def test_encrypt_pdf_missing_dependency_has_actionable_error(self):
+        original_pypdf = sys.modules.get("pypdf")
+        original_pypdf2 = sys.modules.get("PyPDF2")
+        sys.modules["pypdf"] = None
+        sys.modules["PyPDF2"] = None
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                pdf_path = Path(tmp) / "350234.pdf"
+                pdf_path.write_bytes(b"plain-pdf")
+                with self.assertRaisesRegex(RuntimeError, "install pypdf"):
+                    self.jm2pdf._encrypt_pdf(pdf_path, "350234")
+        finally:
+            if original_pypdf is None:
+                sys.modules.pop("pypdf", None)
+            else:
+                sys.modules["pypdf"] = original_pypdf
+
+            if original_pypdf2 is None:
+                sys.modules.pop("PyPDF2", None)
+            else:
+                sys.modules["PyPDF2"] = original_pypdf2
+
     def test_parses_homepage_c107_recommendation_row(self):
         albums = self.jm2pdf._parse_album_links(JM_HOME_RECOMMEND_HTML, 10)
 

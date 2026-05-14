@@ -43,6 +43,8 @@ _MAX_HOME_CANDIDATES = 30
 _JM_HOME_HOST_KEYWORDS = ("18comic", "jmcomic", "jm18c")
 _DIRECT_TIMEOUT = 12
 _KNOWN_RECOMMEND_PROMOTE_PATHS = ("/promotes/29",)
+PDF_ENCRYPTION_FAILED = -2
+_LAST_PDF_ERROR = ""
 _DIRECT_HEADERS = {
     "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "accept-language": "zh-CN,zh;q=0.9",
@@ -99,11 +101,18 @@ def pdf_password_for_code(code: Any) -> str:
     return match.group(0) if match else str(code or "")
 
 
+def get_last_pdf_error() -> str:
+    return _LAST_PDF_ERROR
+
+
 def _encrypt_pdf(pdf_path: Path, password: str) -> None:
     try:
         from pypdf import PdfReader, PdfWriter
     except ImportError:
-        from PyPDF2 import PdfReader, PdfWriter
+        try:
+            from PyPDF2 import PdfReader, PdfWriter
+        except ImportError as exc:
+            raise RuntimeError("PDF encryption dependency missing, install pypdf first") from exc
 
     reader = PdfReader(str(pdf_path))
     writer = PdfWriter()
@@ -130,6 +139,8 @@ def _encrypt_pdf(pdf_path: Path, password: str) -> None:
 
 
 async def get_pdf(code):
+    global _LAST_PDF_ERROR
+    _LAST_PDF_ERROR = ""
     temp_dir = _TMP_DIR / str(code)
     pdf_name = temp_dir / f"{code}.pdf"
     temp_dir.mkdir(parents=True, exist_ok=True)
@@ -182,10 +193,11 @@ async def get_pdf(code):
     try:
         _encrypt_pdf(pdf_name, pdf_password)
     except Exception as exc:
+        _LAST_PDF_ERROR = str(exc)
         print(f"[ERROR] Failed to encrypt PDF {pdf_name}: {exc}")
         if pdf_name.exists():
             pdf_name.unlink()
-        return 0
+        return PDF_ENCRYPTION_FAILED
 
     print(f"[INFO] PDF password: {pdf_password}")
     print(f"[SUCCESS] PDF generated: {pdf_name}")

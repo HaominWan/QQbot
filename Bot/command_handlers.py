@@ -664,6 +664,14 @@ class CommandHandler:
 
         await self._send_group_text(ws, group_id, f"好好好，{command_content} 嘛，这就去给你搬过来~")
         jm_pdf = await jm2pdf.get_pdf(command_content)
+        if jm_pdf == jm2pdf.PDF_ENCRYPTION_FAILED:
+            error = jm2pdf.get_last_pdf_error()
+            await self._send_group_text(
+                ws,
+                group_id,
+                f"PDF 已生成但加密失败，未发送未加密版本。请先更新依赖：pip install -r Bot/requirements.txt。{error}",
+            )
+            return
         if jm_pdf == 0:
             await self._send_group_text(ws, group_id, f"翻了个遍没找到 {command_content}，编号没搞错吧？还是被和谐了？")
             return
@@ -694,6 +702,14 @@ class CommandHandler:
 
         await self._send_private_text(ws, user_id, f"好好好，{command_content} 嘛，这就去给你搬过来~")
         jm_pdf = await jm2pdf.get_pdf(command_content)
+        if jm_pdf == jm2pdf.PDF_ENCRYPTION_FAILED:
+            error = jm2pdf.get_last_pdf_error()
+            await self._send_private_text(
+                ws,
+                user_id,
+                f"PDF 已生成但加密失败，未发送未加密版本。请先更新依赖：pip install -r Bot/requirements.txt。{error}",
+            )
+            return
         if jm_pdf == 0:
             await self._send_private_text(ws, user_id, f"翻了个遍没找到 {command_content}，编号没搞错吧？还是被和谐了？")
             return
