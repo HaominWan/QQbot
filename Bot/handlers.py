@@ -8,6 +8,9 @@ from config import (
     MEMORY_SEARCH_RESULTS,
     MEMORY_WINDOW_SIZE,
     MEMORY_MAX_RECORDS_PER_GROUP,
+    MEMORY_EMBEDDING_MODEL,
+    MEMORY_LEXICAL_WEIGHT,
+    MEMORY_RECENCY_WEIGHT,
     SUPER_USERS,
 )
 from framework import BotContext, EventRouter, MessageEvent
@@ -104,6 +107,9 @@ async def handler_init(interfaces):
                 persist_dir=MEMORY_DB_PATH,
                 search_results=MEMORY_SEARCH_RESULTS,
                 max_records_per_group=MEMORY_MAX_RECORDS_PER_GROUP,
+                embedding_model=MEMORY_EMBEDDING_MODEL,
+                lexical_weight=MEMORY_LEXICAL_WEIGHT,
+                recency_weight=MEMORY_RECENCY_WEIGHT,
             )
             print(f"[Memory] Vector memory initialized at {MEMORY_DB_PATH}")
         except Exception as exc:

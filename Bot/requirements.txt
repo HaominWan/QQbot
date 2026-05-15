@@ -21,7 +21,6 @@ pyppeteer
 wikipedia
 tiktoken
 latex
-chromadb
-sentence-transformers
+fastembed
 huggingface_hub
 pixivpy3

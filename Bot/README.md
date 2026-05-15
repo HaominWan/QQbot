@@ -7,7 +7,7 @@
 | 能力 | 说明 |
 |------|------|
 | 角色扮演 | 内置丛雨人格（主人/守护模式），傲娇恋人风格，支持表情包辅助情绪表达 |
-| 长期记忆 | 所有群消息向量化存入 ChromaDB，LLM 调用时自动检索相关历史作为上下文 |
+| 长期记忆 | 群消息用 FastEmbed 向量化并存入 SQLite，LLM 调用时混合检索相关历史作为上下文 |
 | 图片识别 | 消息含图片时自动调用 HuggingFace BLIP 识别并告知 AI |
 | 视频分析 | 调用 Gemini 2.0 Flash 分析视频内容 |
 | 语音转文字 | 调用 Groq Whisper 转录语音消息 |
@@ -61,9 +61,9 @@ npm install
 npm install markdown-it markdown-it-texmath katex puppeteer
 ```
 
-> 首次运行时 sentence-transformers 会自动下载向量模型（约 90 MB），之后离线可用。
+> 首次运行时 FastEmbed 会自动下载向量模型（默认 `BAAI/bge-small-zh-v1.5`，约 90 MB），之后离线可用。
 > 可提前手动下载：
-> `Bot/.venv/Scripts/python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')"`
+> `Bot/.venv/Scripts/python -c "from fastembed import TextEmbedding; list(TextEmbedding(model_name='BAAI/bge-small-zh-v1.5').embed(['warmup']))"`
 
 ### 2. 配置文件
 
@@ -216,7 +216,7 @@ QQBot/
 │   ├── config.example.json     # 配置模板
 │   ├── requirements.txt        # Python 依赖
 │   ├── memory/
-│   │   └── vector_memory.py    # ChromaDB 向量记忆（后台线程初始化）
+│   │   └── vector_memory.py    # FastEmbed + SQLite 向量记忆（后台线程初始化）
 │   ├── models/
 │   │   ├── User.py             # 私聊会话模型
 │   │   └── Group.py            # 群聊会话模型（含滑动窗口 + 记忆注入）

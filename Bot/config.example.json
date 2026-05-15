@@ -27,6 +27,9 @@
     "window_size": 30,
     "search_results": 3,
     "max_records_per_group": 5000,
+    "embedding_model": "BAAI/bge-small-zh-v1.5",
+    "lexical_weight": 0.18,
+    "recency_weight": 0.04,
     "context_max_chars": 1500,
     "context_placement": "user_message"
   },
