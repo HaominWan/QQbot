@@ -106,6 +106,56 @@ class BanThisCommandTests(unittest.TestCase):
             self.assertFalse(handler.is_group_bot_banned(100))
             self.assertIn("已恢复 Bot 在本群的回复", sent[-1][1])
 
+    def test_command_chain_splits_only_when_every_part_is_command(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            handler, _sent = self.make_handler(Path(tmp))
+
+            self.assertEqual(
+                handler.split_command_chain(".unban jm && .jm recommend && .ban jm"),
+                [".unban jm", ".jm recommend", ".ban jm"],
+            )
+            self.assertEqual(
+                handler.split_command_chain(".md a && b"),
+                [".md a && b"],
+            )
+            self.assertEqual(
+                handler.split_command_chain(".help &&"),
+                [".help &&"],
+            )
+
+    def test_command_chain_runs_plugin_unban_recommend_then_ban_in_order(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            handler, _sent = self.make_handler(Path(tmp))
+            group_id = 100
+            handler.group_plugin_bans.ban(group_id, "jm")
+            observed: list[tuple[int, str, bool]] = []
+
+            async def fake_jm_recommend(_ws, seen_group_id, command_content):
+                observed.append(
+                    (
+                        seen_group_id,
+                        command_content,
+                        handler.group_plugin_bans.is_banned(seen_group_id, "jm"),
+                    )
+                )
+
+            handler._send_jm_recommend_group = fake_jm_recommend
+
+            handled = asyncio.run(
+                handler.handle_command(
+                    None,
+                    self.command_handlers.MessageType.GROUP,
+                    self.command_handlers.CommandType.UNBAN,
+                    ".unban jm && .jm recommend 3 && .ban jm",
+                    group_id=group_id,
+                    user_id=1,
+                )
+            )
+
+            self.assertTrue(handled)
+            self.assertEqual(observed, [(group_id, "recommend 3", False)])
+            self.assertTrue(handler.group_plugin_bans.is_banned(group_id, "jm"))
+
 
 class MutedGroupOrchestratorTests(unittest.TestCase):
     @classmethod

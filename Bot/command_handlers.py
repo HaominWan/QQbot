@@ -255,11 +255,25 @@ class CommandHandler:
     def is_group_bot_banned(self, group_id: int | str) -> bool:
         return self.group_bot_bans.is_banned(group_id)
 
+    def split_command_chain(self, message_content: str) -> list[str]:
+        if "&&" not in message_content:
+            return [message_content]
+
+        commands = [part.strip() for part in message_content.split("&&")]
+        if len(commands) <= 1 or any(not command for command in commands):
+            return [message_content]
+
+        if all(self.get_command_type(command) is not None for command in commands):
+            return commands
+
+        return [message_content]
+
     def is_group_unban_this_command(self, message_content: str) -> bool:
-        command_type = self.get_command_type(message_content)
+        first_command = self.split_command_chain(message_content)[0]
+        command_type = self.get_command_type(first_command)
         if command_type != CommandType.UNBAN:
             return False
-        return self.extract_command_content(message_content, CommandType.UNBAN).strip().lower() == "this"
+        return self.extract_command_content(first_command, CommandType.UNBAN).strip().lower() == "this"
 
     async def handle_command(
         self,
@@ -271,15 +285,23 @@ class CommandHandler:
     ) -> bool:
         try:
             scope = ToolScope(message_type.value)
-            if await self._block_banned_group_tool(scope, command_type, ws, **kwargs):
-                return True
-            return await self.tool_router.handle(
-                scope,
-                command_type,
-                ws,
-                message_content,
-                **kwargs,
-            )
+            handled_any = False
+            for command in self.split_command_chain(message_content):
+                current_command_type = self.get_command_type(command) or command_type
+                if await self._block_banned_group_tool(scope, current_command_type, ws, **kwargs):
+                    handled = True
+                else:
+                    handled = await self.tool_router.handle(
+                        scope,
+                        current_command_type,
+                        ws,
+                        command,
+                        **kwargs,
+                    )
+                if not handled:
+                    return handled_any
+                handled_any = True
+            return handled_any
         except Exception as exc:
             print(f"[Command] Failed to handle {command_type}: {exc}")
             return False
