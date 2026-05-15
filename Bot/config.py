@@ -59,6 +59,7 @@ MEMORY_ENABLED = _memory.get("enabled", True)
 MEMORY_DB_PATH = _resolve_config_path(_memory.get("db_path", "./memory_db"))
 MEMORY_WINDOW_SIZE = int(_memory.get("window_size", 30))
 MEMORY_SEARCH_RESULTS = int(_memory.get("search_results", 3))
+MEMORY_MAX_RECORDS_PER_GROUP = int(_memory.get("max_records_per_group", 5000))
 MEMORY_CONTEXT_MAX_CHARS = int(_memory.get("context_max_chars", 1500))
 MEMORY_CONTEXT_PLACEMENT = _memory.get("context_placement", "user_message")
 

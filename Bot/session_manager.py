@@ -28,7 +28,13 @@ class SessionManager:
         user_id = int(user_id)
         if user_id not in self.private_sessions:
             is_super = self.is_super_user(user_id)
-            self.private_sessions[user_id] = User(user_id, is_super, self.bot_qq, self.master_user_id)
+            self.private_sessions[user_id] = User(
+                user_id,
+                is_super,
+                self.bot_qq,
+                self.master_user_id,
+                window_size=self.window_size,
+            )
         return self.private_sessions[user_id]
 
     def get_group_session(self, group_id: int) -> Group:

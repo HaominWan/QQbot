@@ -4,6 +4,7 @@ import time
 from typing import Optional
 
 _EMBED_MODEL = "paraphrase-multilingual-MiniLM-L12-v2"
+_PRUNE_TARGET_RATIO = 0.9
 
 
 class VectorMemory:
@@ -17,7 +18,7 @@ class VectorMemory:
     _instances: dict = {}
     _lock = threading.Lock()
 
-    def __new__(cls, persist_dir: str = "./memory_db", search_results: int = 6):
+    def __new__(cls, persist_dir: str = "./memory_db", search_results: int = 6, max_records_per_group: int = 5000):
         with cls._lock:
             if persist_dir not in cls._instances:
                 instance = super().__new__(cls)
@@ -25,12 +26,15 @@ class VectorMemory:
                 cls._instances[persist_dir] = instance
             return cls._instances[persist_dir]
 
-    def __init__(self, persist_dir: str = "./memory_db", search_results: int = 6):
+    def __init__(self, persist_dir: str = "./memory_db", search_results: int = 6, max_records_per_group: int = 5000):
         if self._initialized:
+            self._search_results = search_results
+            self._max_records_per_group = max(0, int(max_records_per_group))
             return
         self._initialized = True
         self._persist_dir = persist_dir
         self._search_results = search_results
+        self._max_records_per_group = max(0, int(max_records_per_group))
         self._ready = False
         self._client = None
         self._model = None
@@ -82,6 +86,35 @@ class VectorMemory:
                 "timestamp": int(time.time() * 1000),
             }],
         )
+        self._prune_collection(col, group_id)
+
+    def _prune_collection(self, col, group_id: int) -> None:
+        if self._max_records_per_group <= 0:
+            return
+
+        try:
+            count = col.count()
+            if count <= self._max_records_per_group:
+                return
+
+            target_count = max(1, int(self._max_records_per_group * _PRUNE_TARGET_RATIO))
+            delete_count = count - target_count
+            records = col.get(include=["metadatas"])
+            ids = records.get("ids", [])
+            metadatas = records.get("metadatas", [])
+            pairs = sorted(
+                zip(ids, metadatas),
+                key=lambda pair: int((pair[1] or {}).get("timestamp") or 0),
+            )
+            delete_ids = [record_id for record_id, _meta in pairs[:delete_count]]
+            if delete_ids:
+                col.delete(ids=delete_ids)
+                print(
+                    f"[Memory] Pruned group {group_id} vector memory "
+                    f"from {count} to about {target_count} records"
+                )
+        except Exception as exc:
+            print(f"[Memory] Failed to prune group {group_id}: {exc}")
 
     def clear(self, group_id: int) -> bool:
         """Delete all stored messages for a group. Returns False if not ready."""

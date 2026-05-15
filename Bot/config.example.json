@@ -26,6 +26,7 @@
     "db_path": "./memory_db",
     "window_size": 30,
     "search_results": 3,
+    "max_records_per_group": 5000,
     "context_max_chars": 1500,
     "context_placement": "user_message"
   },

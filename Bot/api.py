@@ -58,6 +58,16 @@ async def call_llm_api(chat_history):
     if DEEPSEEK_MODEL.startswith("deepseek-v4"):
         request_payload["extra_body"] = {"thinking": {"type": "disabled"}}
 
+    async def _consume_response(client):
+        response = await client.chat.completions.create(**request_payload)
+        full_response = ""
+        async for chunk in response:
+            if getattr(chunk, "usage", None):
+                _log_deepseek_usage(chunk.usage)
+            if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
+                full_response += chunk.choices[0].delta.content
+        return full_response
+
     for attempt in range(_MAX_RETRIES):
         try:
             http_client = httpx.AsyncClient(proxy=PROXY_URL) if PROXY_URL else None
@@ -66,15 +76,12 @@ async def call_llm_api(chat_history):
                 base_url=DEEPSEEK_BASE_URL,
                 http_client=http_client,
             )
-
-            response = await client.chat.completions.create(**request_payload)
-            full_response = ""
-            async for chunk in response:
-                if getattr(chunk, "usage", None):
-                    _log_deepseek_usage(chunk.usage)
-                if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
-                    full_response += chunk.choices[0].delta.content
-            return full_response
+            try:
+                return await _consume_response(client)
+            finally:
+                await client.close()
+                if http_client is not None and not http_client.is_closed:
+                    await http_client.aclose()
 
         except Exception as e:
             print(f"Error calling DeepSeek API (attempt {attempt + 1}/{_MAX_RETRIES}): {e}")

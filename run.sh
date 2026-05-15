@@ -18,6 +18,11 @@ fi
 
 mkdir -p "$ROOT/Bot/tmp"
 
+if "$PYTHON" "$ROOT/wait_port.py" --host 127.0.0.1 --port 8080 --timeout 1 >/dev/null 2>&1; then
+  echo "QQ Bot websocket server already appears to be running on 127.0.0.1:8080; refusing to start a duplicate." | tee -a "$LOG"
+  exit 1
+fi
+
 if [[ -n "${NAPCAT_LINUX_CMD:-}" ]]; then
   if command -v pgrep >/dev/null 2>&1 && pgrep -af "napcat|NapCat" >/dev/null 2>&1; then
     echo "NapCat appears to be running; skipping start." | tee -a "$LOG"

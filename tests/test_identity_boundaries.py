@@ -122,5 +122,37 @@ class GroupHistoryBoundaryTests(unittest.TestCase):
         self.assertEqual(memory.stored[-1][1], "guardian")
 
 
+class PrivateHistoryWindowTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        api = types.ModuleType("api")
+
+        async def fake_call_llm_api(_chat_history):
+            return "ok"
+
+        api.call_llm_api = fake_call_llm_api
+        sys.modules["api"] = api
+        cls.user_module = importlib.import_module("models.User")
+
+    def test_private_history_keeps_system_prompt_and_recent_messages(self):
+        user = self.user_module.User(
+            user_id=123,
+            is_super_user=False,
+            bot_qq=456,
+            master_user_id=789,
+            window_size=4,
+        )
+
+        for index in range(6):
+            user.add_message("user", f"message {index}")
+
+        self.assertEqual(user.chat_history[0]["role"], "system")
+        self.assertEqual(len(user.chat_history), 5)
+        self.assertEqual(
+            [message["content"] for message in user.chat_history[1:]],
+            ["message 2", "message 3", "message 4", "message 5"],
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

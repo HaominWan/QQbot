@@ -9,6 +9,7 @@ import traceback
 import os
 import importlib
 import requests
+import errno
 
 # TCP port-probe connections (e.g. from wait_port.ps1) trigger a harmless
 # "opening handshake failed" warning — suppress it so logs stay clean.
@@ -27,12 +28,60 @@ super_users = SUPER_USERS
 
 echo_counter = 0
 echo_dict = {}
+pending_echoes = set()
 running_tasks = []
 
 proxy_url = PROXY_URL
 
 crash_signal = False
 startup_notice_sent = False
+ONEBOT_RESPONSE_TIMEOUT = 30.0
+
+
+def _next_echo():
+    global echo_counter
+    echo_counter += 1
+    self_echo = str(echo_counter)
+    pending_echoes.add(self_echo)
+    return self_echo
+
+
+async def _wait_for_echo(self_echo, action_name, timeout=ONEBOT_RESPONSE_TIMEOUT):
+    deadline = time.monotonic() + timeout
+    try:
+        while not crash_signal:
+            response = echo_dict.pop(self_echo, None)
+            if response is not None:
+                return response
+            if time.monotonic() >= deadline:
+                print(f"[NapCat]Timeout waiting for {action_name} response, echo={self_echo}")
+                return None
+            await asyncio.sleep(0.1)
+        return None
+    finally:
+        pending_echoes.discard(self_echo)
+        echo_dict.pop(self_echo, None)
+
+
+async def _send_onebot_action(ws, action, params, timeout=ONEBOT_RESPONSE_TIMEOUT):
+    self_echo = _next_echo()
+    try:
+        await ws.send(
+            json.dumps(
+                {
+                    "action": action,
+                    "params": params,
+                    "echo": self_echo,
+                }
+            )
+        )
+        response = await _wait_for_echo(self_echo, action, timeout=timeout)
+        print("[NapCat]Response:", response)
+        return response
+    except Exception:
+        pending_echoes.discard(self_echo)
+        echo_dict.pop(self_echo, None)
+        raise
 
 
 def test_if_super_user(user_id):
@@ -48,45 +97,17 @@ def test_if_super_user(user_id):
     return result
 
 async def get_message_by_id(ws, message_id):
-    global echo_counter
-    echo_counter += 1
-    self_echo = str(echo_counter)
-    json_data = {
-        "action": "get_msg",
-        "params": {
-            "message_id": message_id
-        },
-        "echo": self_echo
-    }
-    await ws.send(json.dumps(json_data))
-
-    while self_echo not in echo_dict and not crash_signal:
-        await asyncio.sleep(0.1)
-    response = echo_dict[self_echo]
-    del echo_dict[self_echo]
-    print("[NapCat]Response:",response)
+    response = await _send_onebot_action(ws, "get_msg", {"message_id": message_id})
+    if response is None:
+        return None
     if "data" in response:
         return response["data"]
     return None
 
 async def get_stranger_info(ws, user_id):
-    global echo_counter
-    echo_counter += 1
-    self_echo = str(echo_counter)
-    json_data = {
-        "action": "get_stranger_info",
-        "params": {
-            "user_id": user_id
-        },
-        "echo": self_echo
-    }
-    await ws.send(json.dumps(json_data))
-
-    while self_echo not in echo_dict and not crash_signal:
-        await asyncio.sleep(0.1)
-    response = echo_dict[self_echo]
-    del echo_dict[self_echo]
-    print("[NapCat]Response:",response)
+    response = await _send_onebot_action(ws, "get_stranger_info", {"user_id": user_id})
+    if response is None:
+        return None
     if "data" in response:
         return response["data"]
     return None
@@ -94,115 +115,49 @@ async def get_stranger_info(ws, user_id):
 async def send_group_message(ws, group_id, message, auto_escape=False):
 # async def send_group_message(ws_url: str, group_id: str, message, auto_escape: bool =False):
     print("[NapCat]Sending message:", message)
-    global echo_counter
-    echo_counter += 1
-    self_echo = str(echo_counter)
-    json_data = {
-        "action": "send_group_msg",
-        "params": {
+    response = await _send_onebot_action(
+        ws,
+        "send_group_msg",
+        {
             "group_id": group_id,
             "message": message,
-            "auto_escape": auto_escape
+            "auto_escape": auto_escape,
         },
-        "echo": self_echo
-    }
-    
-    # await ws.send(json.dumps(json_data))
-
-    # while self_echo not in echo_dict and not crash_signal:
-    #     await asyncio.sleep(0.1)
-
-    # response = echo_dict.get(self_echo)
-    # if response:
-    #     del echo_dict[self_echo]
-    #     print ("[NapCat]Response:",response)
-    #     if "status" in response:
-    #         if response["status"] == "ok":
-    #             print("[NapCat]Message sent successfully")
-    #         else:
-    #             print("[NapCat]Failed to send message")
-    #     if response is None:
-    #         return None
-    #     if "data" in response and response["data"] != None and "message_id" in response["data"]:
-    #         return response["data"]["message_id"]
-    # else:
-    #     print("[NapCat]No response received or crash signal triggered")
-    # return None
-
-    async with aiohttp.ClientSession() as session:
-        await ws.send(json.dumps(json_data))
-        while self_echo not in echo_dict and not crash_signal:
-            await asyncio.sleep(0.1)
-        response = echo_dict.get(self_echo)
-        if response:
-            del echo_dict[self_echo]
-            print("[NapCat]Response:", response)
-            if "status" in response:
-                if response["status"] == "ok":
-                    print("[NapCat]Message sent successfully")
-                else:
-                    print("[NapCat]Failed to send message")
-            if response is None:
-                return None
-            if "data" in response and response["data"] is not None and "message_id" in response["data"]:
-                return response["data"]["message_id"]
-        else:
-            print("[NapCat]No response received or crash signal triggered")
-        return None
+    )
+    if response:
+        if "status" in response:
+            if response["status"] == "ok":
+                print("[NapCat]Message sent successfully")
+            else:
+                print("[NapCat]Failed to send message")
+        if "data" in response and response["data"] is not None and "message_id" in response["data"]:
+            return response["data"]["message_id"]
+    else:
+        print("[NapCat]No response received or crash signal triggered")
+    return None
 
 async def send_private_message(ws, user_id, message, auto_escape=False):
     print("[NapCat]Sending message:", message)
-    global echo_counter
-    echo_counter += 1
-    self_echo = str(echo_counter)
-    json_data = {
-        "action": "send_private_msg",
-        "params": {
+    response = await _send_onebot_action(
+        ws,
+        "send_private_msg",
+        {
             "user_id": user_id,
             "message": message,
-            "auto_escape": auto_escape
+            "auto_escape": auto_escape,
         },
-        "echo": self_echo
-    }
-    # await ws.send(json.dumps(json_data))
-    # while self_echo not in echo_dict and not crash_signal:
-    #     await asyncio.sleep(0.1)
-    # response = echo_dict.get(self_echo)
-    # if response:
-    #     del echo_dict[self_echo]
-    #     print ("[NapCat]Response:",response)
-    #     if "status" in response:
-    #         if response["status"] == "ok":
-    #             print("[NapCat]Message sent successfully")
-    #         else:
-    #             print("[NapCat]Failed to send message")
-    #     if response == None:
-    #         return None
-    #     if "data" in response and response["data"] != None and "message_id" in response["data"]:
-    #         return response["data"]["message_id"]
-    # else:
-    #     print("[NapCat]No response received or crash signal triggered")
-    # return None
-    async with aiohttp.ClientSession() as session:
-        await ws.send(json.dumps(json_data))
-        while self_echo not in echo_dict and not crash_signal:
-            await asyncio.sleep(0.1)
-        response = echo_dict.get(self_echo)
-        if response:
-            del echo_dict[self_echo]
-            print("[NapCat]Response:", response)
-            if "status" in response:
-                if response["status"] == "ok":
-                    print("[NapCat]Message sent successfully")
-                else:
-                    print("[NapCat]Failed to send message")
-            if response is None:
-                return None
-            if "data" in response and response["data"] is not None and "message_id" in response["data"]:
-                return response["data"]["message_id"]
-        else:
-            print("[NapCat]No response received or crash signal triggered")
-        return None
+    )
+    if response:
+        if "status" in response:
+            if response["status"] == "ok":
+                print("[NapCat]Message sent successfully")
+            else:
+                print("[NapCat]Failed to send message")
+        if "data" in response and response["data"] is not None and "message_id" in response["data"]:
+            return response["data"]["message_id"]
+    else:
+        print("[NapCat]No response received or crash signal triggered")
+    return None
 
 async def notify_super_users_bot_started(ws):
     global startup_notice_sent
@@ -238,28 +193,17 @@ async def upload_group_file(ws, group_id, file, name, folder):
     # }
 
     # response = requests.request("8080", url, headers=headers, data=payload)
-    global echo_counter
-    echo_counter += 1
-    self_echo = str(echo_counter)
-    json_data = {
-        "action": "upload_group_file",
-        "params": {
+    response = await _send_onebot_action(
+        ws,
+        "upload_group_file",
+        {
             "group_id": group_id,
             "file": file,
             "name": name,
-            "folder": folder
+            "folder": folder,
         },
-        "echo": self_echo
-    }
-
-    await ws.send(json.dumps(json_data))
-
-    while self_echo not in echo_dict and not crash_signal:
-        await asyncio.sleep(0.1)
-    response = echo_dict[self_echo]
-    del echo_dict[self_echo]
-    print("[NapCat]Response:",response)
-    if "status" in response:
+    )
+    if response and "status" in response:
         if response["status"] == "ok":
             print("[NapCat]File uploaded successfully")
         else:
@@ -282,27 +226,16 @@ async def upload_private_file(ws, user_id, file, name):
 
     # response = requests.request("8080", url, headers=headers, data=payload)
 
-    global echo_counter
-    echo_counter += 1
-    self_echo = str(echo_counter)
-    json_data = {
-        "action": "upload_private_file",
-        "params": {
+    response = await _send_onebot_action(
+        ws,
+        "upload_private_file",
+        {
             "user_id": user_id,
             "file": file,
-            "name": name
+            "name": name,
         },
-        "echo": self_echo
-    }
-
-    await ws.send(json.dumps(json_data))
-
-    while self_echo not in echo_dict and not crash_signal:
-        await asyncio.sleep(0.1)
-    response = echo_dict[self_echo]
-    del echo_dict[self_echo]
-    print("[NapCat]Response:",response)
-    if "status" in response:
+    )
+    if response and "status" in response:
         if response["status"] == "ok":
             print("[NapCat]File uploaded successfully")
         else:
@@ -313,24 +246,8 @@ async def upload_private_file(ws, user_id, file, name):
 async def withdraw_group_message(ws, message_id):
     if message_id == None:
         return None
-    global echo_counter
-    echo_counter += 1
-    self_echo = str(echo_counter)
-    json_data = {
-        "action": "delete_msg",
-        "params": {
-            "message_id": message_id
-        },
-        "echo": self_echo
-    }
-    await ws.send(json.dumps(json_data))
-
-    while self_echo not in echo_dict and not crash_signal:
-        await asyncio.sleep(0.1)
-    response = echo_dict[self_echo]
-    del echo_dict[self_echo]
-    print("[NapCat]Response:",response)
-    if "status" in response:
+    response = await _send_onebot_action(ws, "delete_msg", {"message_id": message_id})
+    if response and "status" in response:
         if response["status"] == "ok":
             print("[NapCat]Message withdrawn successfully")
         else:
@@ -489,7 +406,11 @@ async def serve():
 
                 if "status" in response and "echo" in response:
                     global echo_dict
-                    echo_dict[response["echo"]] = response
+                    response_echo = str(response["echo"])
+                    if response_echo in pending_echoes:
+                        echo_dict[response_echo] = response
+                    else:
+                        print(f"[NapCat]Ignoring late or unexpected echo response: {response_echo}")
                     retry = 0
                     continue
                 
@@ -517,11 +438,19 @@ async def serve():
                 continue
 
     print(f"[NapCat]Starting reverse websocket server: {websocket_url}/onebot/v11/ws")
-    await hot_reload("handlers")
     async with websockets.serve(serve_forever, Host, int(Port)):
+        await hot_reload("handlers")
         await asyncio.Future()
        
 bot_workpath = os.path.join(os.path.dirname(__file__), "bot_workpath")
+
+
+def _is_address_in_use(exc):
+    if not isinstance(exc, OSError):
+        return False
+    if getattr(exc, "errno", None) in (errno.EADDRINUSE, 10048):
+        return True
+    return "address already in use" in str(exc).lower()
 
 async def server():
     print("[NapCat]Starting server")
@@ -530,6 +459,9 @@ async def server():
         try:
             await serve()
         except Exception as e:
+            if _is_address_in_use(e):
+                print(f"[NapCat]Port {Host}:{Port} is already in use; another bot is probably running.")
+                raise
             print("[NapCat]", traceback.format_exc())
             print("[NapCat]Error:", e)
             await asyncio.sleep(5)

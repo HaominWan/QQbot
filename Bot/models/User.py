@@ -2,10 +2,11 @@ import roles
 from api import *
 
 class User:
-    def __init__(self, user_id, is_super_user, bot_qq, master_user_id=None):
+    def __init__(self, user_id, is_super_user, bot_qq, master_user_id=None, window_size: int = 30):
         self.user_id = user_id
         self.is_super_user = is_super_user
         self.master_user_id = master_user_id
+        self._window_size = max(1, int(window_size))
         self.chat_history = [
             {
                 "role": "system",
@@ -28,6 +29,16 @@ class User:
 
     def add_message(self, role, content):
         self.chat_history.append({"role": role, "content": content})
+        self._trim_history()
+
+    def _trim_history(self):
+        system_messages = [msg for msg in self.chat_history if msg.get("role") == "system"]
+        recent_messages = [msg for msg in self.chat_history if msg.get("role") != "system"]
+        if len(recent_messages) <= self._window_size:
+            return
+
+        system_message = system_messages[:1]
+        self.chat_history = system_message + recent_messages[-self._window_size:]
 
     def get_chat_history(self):
         return self.chat_history
