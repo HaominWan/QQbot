@@ -62,6 +62,36 @@ class ApiWebSearchRoutingTests(unittest.TestCase):
         self.assertTrue(self.api._looks_time_sensitive(message))
         self.assertEqual(self.api._search_query_for_message(message), "张雪峰 复活 最新")
 
+    def test_bracketed_work_summary_query_uses_web_search(self):
+        message = "对类似《超时空辉夜姬》进行简述"
+
+        self.assertTrue(self.api._looks_time_sensitive(message))
+        self.assertEqual(self.api._search_query_for_message(message), "超时空辉夜姬 简介 剧情 评价")
+
+    def test_unbracketed_work_opinion_query_uses_web_search(self):
+        message = "你对从零开始的异世界生活有什么看法"
+
+        self.assertTrue(self.api._looks_time_sensitive(message))
+        self.assertEqual(self.api._search_query_for_message(message), "从零开始的异世界生活 简介 剧情 评价")
+
+    def test_short_work_alias_query_uses_web_search(self):
+        message = "你对re0有什么看法"
+
+        self.assertTrue(self.api._looks_time_sensitive(message))
+        self.assertEqual(self.api._search_query_for_message(message), "re0 简介 剧情 评价")
+
+    def test_slash_separated_work_aliases_are_kept_for_search(self):
+        message = "你对re0/从零开始的异世界生活有什么看法"
+
+        self.assertTrue(self.api._looks_time_sensitive(message))
+        self.assertEqual(
+            self.api._search_query_for_message(message),
+            "re0 从零开始的异世界生活 简介 剧情 评价",
+        )
+
+    def test_casual_personal_opinion_does_not_trigger_work_search(self):
+        self.assertFalse(self.api._looks_time_sensitive("你对我有什么看法"))
+
     def test_knowledge_gap_response_retries_with_search_for_event_context(self):
         self.assertTrue(
             self.api._should_retry_with_search(

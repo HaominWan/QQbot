@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import asyncio
 from dataclasses import dataclass
 from html import unescape
 from html.parser import HTMLParser
@@ -23,6 +24,89 @@ class SearchResult:
     title: str
     url: str
     snippet: str = ""
+    content: str = ""
+
+
+class _ReadableTextParser(HTMLParser):
+    _SKIP_TAGS = {
+        "aside",
+        "button",
+        "canvas",
+        "footer",
+        "form",
+        "header",
+        "iframe",
+        "nav",
+        "noscript",
+        "option",
+        "script",
+        "select",
+        "style",
+        "svg",
+    }
+    _BLOCK_TAGS = {
+        "article",
+        "aside",
+        "blockquote",
+        "br",
+        "dd",
+        "div",
+        "dl",
+        "dt",
+        "figcaption",
+        "footer",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "header",
+        "li",
+        "main",
+        "nav",
+        "ol",
+        "p",
+        "pre",
+        "section",
+        "table",
+        "td",
+        "th",
+        "tr",
+        "ul",
+    }
+
+    def __init__(self, max_chars: int):
+        super().__init__(convert_charrefs=True)
+        self.max_chars = max_chars
+        self.parts: list[str] = []
+        self._skip_depth = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in self._SKIP_TAGS:
+            self._skip_depth += 1
+            return
+        if tag in self._BLOCK_TAGS:
+            self._append("\n")
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in self._SKIP_TAGS and self._skip_depth:
+            self._skip_depth -= 1
+            return
+        if tag in self._BLOCK_TAGS:
+            self._append("\n")
+
+    def handle_data(self, data: str) -> None:
+        if self._skip_depth:
+            return
+        self._append(data)
+
+    def text(self) -> str:
+        return _trim_text("\n".join(_clean_text(part) for part in self.parts), self.max_chars)
+
+    def _append(self, text: str) -> None:
+        if len("".join(self.parts)) < self.max_chars * 2:
+            self.parts.append(text)
 
 
 class _DuckDuckGoHTMLParser(HTMLParser):
@@ -95,6 +179,8 @@ async def search_web(
     max_results: int = 4,
     timeout_seconds: float = 10.0,
     proxy_url: str | None = None,
+    fetch_pages: bool = True,
+    page_max_chars: int = 1400,
 ) -> list[SearchResult]:
     query = normalize_query(query)
     if not query or max_results <= 0:
@@ -118,14 +204,62 @@ async def search_web(
             proxy_url=proxy_url,
         )
         if results:
-            return results
+            return await enrich_search_results(
+                session,
+                results,
+                proxy_url=proxy_url,
+                fetch_pages=fetch_pages,
+                page_max_chars=page_max_chars,
+            )
 
-        return await _search_duckduckgo_api(
+        results = await _search_duckduckgo_api(
             session,
             query,
             max_results=max_results,
             proxy_url=proxy_url,
         )
+        return await enrich_search_results(
+            session,
+            results,
+            proxy_url=proxy_url,
+            fetch_pages=fetch_pages,
+            page_max_chars=page_max_chars,
+        )
+
+
+async def enrich_search_results(
+    session: aiohttp.ClientSession,
+    results: list[SearchResult],
+    *,
+    proxy_url: str | None,
+    fetch_pages: bool = True,
+    page_max_chars: int = 1400,
+) -> list[SearchResult]:
+    if not fetch_pages or page_max_chars <= 0 or not results:
+        return results
+
+    tasks = [
+        _fetch_readable_page_text(
+            session,
+            result.url,
+            proxy_url=proxy_url,
+            max_chars=page_max_chars,
+        )
+        for result in results
+    ]
+    contents = await asyncio.gather(*tasks, return_exceptions=True)
+    enriched: list[SearchResult] = []
+    for result, content in zip(results, contents):
+        page_text = "" if isinstance(content, Exception) else str(content)
+        enriched.append(
+            SearchResult(
+                title=result.title,
+                url=result.url,
+                snippet=result.snippet,
+                content=page_text,
+            )
+        )
+    return enriched
 
 
 def parse_duckduckgo_html(html: str, max_results: int = 4) -> list[SearchResult]:
@@ -155,6 +289,9 @@ def format_search_context(query: str, results: Iterable[SearchResult]) -> str:
         lines.append(f"URL: {result.url}")
         if snippet:
             lines.append(f"Snippet: {snippet}")
+        content = result.content[:1400].strip()
+        if content:
+            lines.append(f"Page excerpt: {content}")
     return "\n".join(lines)
 
 
@@ -240,6 +377,60 @@ def _clean_text(text: str) -> str:
     text = unescape(text or "")
     text = _TAG_RE.sub(" ", text)
     return _SPACE_RE.sub(" ", text).strip()
+
+
+async def _fetch_readable_page_text(
+    session: aiohttp.ClientSession,
+    url: str,
+    *,
+    proxy_url: str | None,
+    max_chars: int,
+) -> str:
+    if not _is_fetchable_page_url(url):
+        return ""
+
+    try:
+        async with session.get(url, proxy=proxy_url, allow_redirects=True) as response:
+            if response.status != 200:
+                return ""
+            content_type = response.headers.get("content-type", "")
+            if "text/html" not in content_type and "application/xhtml" not in content_type:
+                return ""
+            html = await response.text(errors="ignore")
+    except Exception:
+        return ""
+
+    return extract_readable_text(html, max_chars=max_chars)
+
+
+def extract_readable_text(html: str, max_chars: int = 1400) -> str:
+    parser = _ReadableTextParser(max_chars=max_chars)
+    parser.feed(html or "")
+    parser.close()
+    return parser.text()
+
+
+def _trim_text(text: str, max_chars: int) -> str:
+    lines = []
+    seen: set[str] = set()
+    for line in text.splitlines():
+        line = _clean_text(line)
+        if len(line) < 2 or line in seen:
+            continue
+        seen.add(line)
+        lines.append(line)
+
+    cleaned = "\n".join(lines)
+    if len(cleaned) <= max_chars:
+        return cleaned
+    return cleaned[:max_chars].rsplit("\n", 1)[0].strip() or cleaned[:max_chars].strip()
+
+
+def _is_fetchable_page_url(url: str) -> bool:
+    if not _is_http_url(url):
+        return False
+    path = urlparse(url).path.lower()
+    return not path.endswith((".jpg", ".jpeg", ".png", ".gif", ".webp", ".pdf", ".zip", ".rar", ".7z"))
 
 
 def _dedupe_results(results: Iterable[SearchResult], max_results: int) -> list[SearchResult]:

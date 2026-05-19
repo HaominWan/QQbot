@@ -17,7 +17,8 @@ _WEB_SEARCH_INSTRUCTION = (
     "When the latest user request needs current, time-sensitive, or external public facts "
     "that may have changed after your training data, request a web search before answering. "
     "This includes news, hot topics, current people/companies, prices, schedules, policy, "
-    "weather, sports, releases, and recent events. To request search, reply with only "
+    "weather, sports, releases, recent events, and obscure works or public entities that "
+    "you cannot identify reliably. To request search, reply with only "
     "<web_search>short search query</web_search>. Do not use this tag for timeless knowledge, "
     "casual chat, roleplay, personal advice, when the user asks not to search, or when you can "
     "answer reliably without current data."
@@ -175,6 +176,77 @@ _KNOWLEDGE_GAP_TERMS = (
     "don't know",
     "do not know",
 )
+_WORK_LOOKUP_TERMS = (
+    "简述",
+    "简介",
+    "介绍",
+    "概述",
+    "看法",
+    "评价",
+    "如何评价",
+    "怎么看",
+    "怎么样",
+    "好看",
+    "推荐",
+    "值得看",
+    "剧情",
+    "讲什么",
+    "说什么",
+    "讲了什么",
+    "是什么",
+    "作者",
+    "原作",
+    "出处",
+    "设定",
+    "角色",
+    "作品",
+    "漫画",
+    "动画",
+    "动漫",
+    "小说",
+    "游戏",
+    "电影",
+    "番剧",
+    "ova",
+    "summary",
+    "plot",
+    "synopsis",
+)
+_WORK_TITLE_PATTERNS = (
+    re.compile(
+        r"(?:你对|对|如何评价|怎么看待|怎么看|评价一下|聊聊|说说)"
+        r"(?P<title>[A-Za-z0-9\u4e00-\u9fffぁ-んァ-ヶー：:！!？?·・._\-/ ]{2,80}?)"
+        r"(?:有什么看法|的看法|怎么看|怎么样|如何|评价|推荐吗|好看吗|值得看吗|呢|吗|$)"
+    ),
+    re.compile(
+        r"(?P<title>[A-Za-z0-9\u4e00-\u9fffぁ-んァ-ヶー：:！!？?·・._\-/ ]{2,80}?)"
+        r"(?:有什么看法|的看法|怎么样|好看吗|推荐吗|值得看吗|讲什么|讲了什么|剧情|简介|简述|是什么)"
+    ),
+)
+_WORK_TITLE_LEADING_NOISE_RE = re.compile(
+    r"^(?:你对|对|如何评价|怎么看待|怎么看|评价一下|聊聊|说说|类似|关于|这个|这部|那部|那个|一部|作品|动漫|动画|漫画|小说|游戏|电影|番剧|叫做|名叫|进行)+"
+)
+_WORK_TITLE_TRAILING_NOISE_RE = re.compile(
+    r"(?:这个|这部|那部|作品|动漫|动画|漫画|小说|游戏|电影|番剧|一下|呢|吗|吧|啊)+$"
+)
+_WORK_TITLE_LOOKUP_SUFFIX_RE = re.compile(
+    r"(?:有什么看法|的看法|怎么看|怎么样|如何|评价|推荐吗|好看吗|值得看吗|讲什么|讲了什么|剧情|简介|简述|是什么)$"
+)
+_NON_WORK_TITLES = {
+    "我",
+    "你",
+    "他",
+    "她",
+    "它",
+    "我们",
+    "你们",
+    "他们",
+    "她们",
+    "这个",
+    "那个",
+    "这件事",
+    "这东西",
+}
 _COMMON_CHINESE_SURNAMES = (
     "赵钱孙李周吴郑王冯陈褚卫蒋沈韩杨朱秦尤许何吕施张孔曹严华金魏陶姜"
     "戚谢邹喻柏窦章苏潘葛范彭鲁韦马苗方俞任袁柳鲍史唐费廉岑薛雷贺"
@@ -190,6 +262,7 @@ _COMMON_CHINESE_SURNAMES = (
     "沙养鞠丰巢关蒯相荆红游竺权盖益桓岳帅况琴丘左商牟佘伯赏南墨哈"
 )
 _CHINESE_NAME_RE = re.compile(f"[{_COMMON_CHINESE_SURNAMES}][\u4e00-\u9fff]{{1,2}}")
+_BRACKET_TITLE_RE = re.compile(r"[《「『](?P<title>[^》」』]{2,80})[》」』]")
 
 
 def _usage_value(usage, name):
@@ -396,6 +469,10 @@ def _search_query_for_message(message: str) -> str:
     if not text:
         return ""
 
+    work_title = _extract_work_title(text)
+    if work_title and _looks_work_lookup(text):
+        return f"{work_title} 简介 剧情 评价"
+
     event_term = _matched_event_term(text)
     entity = _extract_named_entity(text, event_term)
     if event_term and entity:
@@ -410,7 +487,7 @@ def _should_retry_with_search(message: str, response: str) -> bool:
     response_text = (response or "").lower()
     if not any(term in response_text for term in _KNOWLEDGE_GAP_TERMS):
         return False
-    return _has_event_context_hint(text) or _looks_time_sensitive(text)
+    return _looks_work_lookup(text) or _has_event_context_hint(text) or _looks_time_sensitive(text)
 
 
 def _looks_time_sensitive(message: str) -> bool:
@@ -419,6 +496,8 @@ def _looks_time_sensitive(message: str) -> bool:
         return False
     if any(term in text for term in _NO_SEARCH_TERMS):
         return False
+    if _looks_work_lookup(text):
+        return True
     if _has_event_context_hint(text):
         return True
     if any(term in text for term in _CURRENT_INFO_TERMS):
@@ -460,6 +539,58 @@ def _extract_named_entity(text: str, event_term: str | None = None) -> str | Non
     if match:
         return match.group(0)
     return None
+
+
+def _looks_work_lookup(text: str) -> bool:
+    return _extract_work_title(text) is not None and any(term in text for term in _WORK_LOOKUP_TERMS)
+
+
+def _extract_work_title(text: str) -> str | None:
+    match = _BRACKET_TITLE_RE.search(text or "")
+    if match:
+        return _clean_work_title(match.group("title"))
+
+    for pattern in _WORK_TITLE_PATTERNS:
+        match = pattern.search(text or "")
+        if not match:
+            continue
+        title = _clean_work_title(match.group("title"))
+        if title:
+            return title
+    return None
+
+
+def _clean_work_title(raw_title: str) -> str | None:
+    raw_title = normalize_query(raw_title, max_chars=80)
+    raw_title = raw_title.strip(" 　\"'“”‘’.,，。?？!！:：;；()（）[]【】<>《》「」『』")
+    if "/" in raw_title:
+        parts = [_clean_single_work_title(part) for part in raw_title.split("/")]
+        title = " ".join(part for part in parts if part)
+    else:
+        title = _clean_single_work_title(raw_title)
+
+    if not title or title.lower() in _NON_WORK_TITLES:
+        return None
+    if not _looks_like_work_title(title):
+        return None
+    return title
+
+
+def _clean_single_work_title(title: str) -> str:
+    title = title.strip(" 　\"'“”‘’.,，。?？!！:：;；()（）[]【】<>《》「」『』")
+    title = _WORK_TITLE_LEADING_NOISE_RE.sub("", title)
+    title = _WORK_TITLE_LOOKUP_SUFFIX_RE.sub("", title)
+    title = _WORK_TITLE_TRAILING_NOISE_RE.sub("", title)
+    return title.strip(" 　\"'“”‘’.,，。?？!！:：;；()（）[]【】<>《》「」『』")
+
+
+def _looks_like_work_title(title: str) -> bool:
+    compact = re.sub(r"\s+", "", title)
+    if len(compact) < 2:
+        return False
+    if re.search(r"[A-Za-z0-9]", compact):
+        return True
+    return len(compact) >= 3
 
 
 # Backward-compatible name while model/session code is migrated gradually.

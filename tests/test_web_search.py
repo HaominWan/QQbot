@@ -7,7 +7,13 @@ BOT_DIR = Path(__file__).resolve().parents[1] / "Bot"
 if str(BOT_DIR) not in sys.path:
     sys.path.insert(0, str(BOT_DIR))
 
-from web_search import SearchResult, format_search_context, normalize_query, parse_duckduckgo_html
+from web_search import (
+    SearchResult,
+    extract_readable_text,
+    format_search_context,
+    normalize_query,
+    parse_duckduckgo_html,
+)
 
 
 class WebSearchHelpersTests(unittest.TestCase):
@@ -53,13 +59,34 @@ class WebSearchHelpersTests(unittest.TestCase):
     def test_format_search_context_includes_sources(self):
         context = format_search_context(
             "test query",
-            [SearchResult("Title", "https://example.com", "Snippet")],
+            [SearchResult("Title", "https://example.com", "Snippet", "Full page text")],
         )
 
         self.assertIn("Web search query: test query", context)
         self.assertIn("[1] Title", context)
         self.assertIn("URL: https://example.com", context)
         self.assertIn("Snippet: Snippet", context)
+        self.assertIn("Page excerpt: Full page text", context)
+
+    def test_extract_readable_text_ignores_script_and_keeps_body(self):
+        html = """
+        <html>
+          <head><script>var bad = "noise";</script></head>
+          <body>
+            <h1>作品标题</h1>
+            <p>这是作品简介正文。</p>
+            <style>.hidden { display: none; }</style>
+            <p>这是剧情摘要。</p>
+          </body>
+        </html>
+        """
+
+        text = extract_readable_text(html, max_chars=200)
+
+        self.assertIn("作品标题", text)
+        self.assertIn("这是作品简介正文。", text)
+        self.assertIn("这是剧情摘要。", text)
+        self.assertNotIn("noise", text)
 
 
 if __name__ == "__main__":
