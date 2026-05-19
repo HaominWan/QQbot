@@ -137,6 +137,59 @@ _NO_SEARCH_TERMS = (
     "do not search",
     "don't search",
 )
+_EVENT_CONTEXT_TERMS = (
+    "复活",
+    "去世",
+    "死亡",
+    "死了",
+    "出事",
+    "塌房",
+    "封禁",
+    "封号",
+    "停播",
+    "被抓",
+    "被捕",
+    "失联",
+    "翻车",
+    "道歉",
+    "风波",
+    "争议",
+    "辟谣",
+    "谣言",
+    "爆料",
+    "瓜",
+)
+_KNOWLEDGE_GAP_TERMS = (
+    "不认识",
+    "不知道",
+    "不了解",
+    "不清楚",
+    "没听说",
+    "没有听说",
+    "查无",
+    "无法确认",
+    "无法判断",
+    "是谁",
+    "谁是",
+    "who is",
+    "don't know",
+    "do not know",
+)
+_COMMON_CHINESE_SURNAMES = (
+    "赵钱孙李周吴郑王冯陈褚卫蒋沈韩杨朱秦尤许何吕施张孔曹严华金魏陶姜"
+    "戚谢邹喻柏窦章苏潘葛范彭鲁韦马苗方俞任袁柳鲍史唐费廉岑薛雷贺"
+    "倪汤滕殷罗毕郝邬安常乐于傅皮卞齐康伍余元卜顾孟平黄和穆萧尹"
+    "姚邵湛汪祁毛禹狄米贝明臧伏成戴谈宋庞熊纪舒屈项祝董梁杜阮蓝"
+    "闵席季麻强贾路娄江童颜郭梅盛林刁钟徐邱骆高夏蔡田胡凌霍虞万"
+    "支柯管卢莫房缪解应宗丁宣邓杭洪包左石崔龚程邢裴陆荣翁荀羊"
+    "甄曲家封芮靳汲松井段富焦巴弓牧山谷车侯全班秋仲伊宫宁仇栾"
+    "甘厉戎祖武符刘景詹束龙叶幸韶郜黎蓟薄印宿白怀蒲邰鄂索赖卓"
+    "蔺屠蒙池乔胥苍双闻党翟谭贡劳姬申冉宰雍桑桂濮牛寿通边燕冀"
+    "浦尚农温别庄晏柴瞿阎慕连茹习艾鱼容向古易慎戈廖庾终暨居衡"
+    "步都耿满弘匡国文寇广东欧利蔚越师巩聂晁勾敖融冷辛阚简饶曾"
+    "沙养鞠丰巢关蒯相荆红游竺权盖益桓岳帅况琴丘左商牟佘伯赏南墨哈"
+)
+_CHINESE_NAME_RE = re.compile(f"[{_COMMON_CHINESE_SURNAMES}][\u4e00-\u9fff]{{1,2}}")
 
 
 def _usage_value(usage, name):
@@ -181,7 +234,7 @@ async def call_llm_api(chat_history):
     if WEB_SEARCH_AUTO_FOR_TIME_SENSITIVE and _looks_time_sensitive(latest_user_message):
         return await _answer_with_web_context(
             messages,
-            latest_user_message,
+            _search_query_for_message(latest_user_message),
             reason="time-sensitive query",
         )
 
@@ -191,6 +244,12 @@ async def call_llm_api(chat_history):
     first_response = await _call_deepseek_api(_with_search_instruction(messages))
     requested_query = _extract_web_search_query(first_response)
     if not requested_query:
+        if _should_retry_with_search(latest_user_message, first_response):
+            return await _answer_with_web_context(
+                messages,
+                _search_query_for_message(latest_user_message),
+                reason="response showed knowledge gap",
+            )
         return first_response
 
     return await _answer_with_web_context(
@@ -332,12 +391,36 @@ def _extract_web_search_query(response: str) -> str:
     return normalize_query(match.group(1))
 
 
+def _search_query_for_message(message: str) -> str:
+    text = normalize_query(message)
+    if not text:
+        return ""
+
+    event_term = _matched_event_term(text)
+    entity = _extract_named_entity(text, event_term)
+    if event_term and entity:
+        return f"{entity} {event_term} 最新"
+    return text
+
+
+def _should_retry_with_search(message: str, response: str) -> bool:
+    text = (message or "").lower()
+    if not text or any(term in text for term in _NO_SEARCH_TERMS):
+        return False
+    response_text = (response or "").lower()
+    if not any(term in response_text for term in _KNOWLEDGE_GAP_TERMS):
+        return False
+    return _has_event_context_hint(text) or _looks_time_sensitive(text)
+
+
 def _looks_time_sensitive(message: str) -> bool:
     text = (message or "").lower()
     if not text:
         return False
     if any(term in text for term in _NO_SEARCH_TERMS):
         return False
+    if _has_event_context_hint(text):
+        return True
     if any(term in text for term in _CURRENT_INFO_TERMS):
         return True
     if any(term in text for term in _TIME_HINT_TERMS):
@@ -345,6 +428,38 @@ def _looks_time_sensitive(message: str) -> bool:
     if re.search(r"20\d{2}", text):
         return any(term in text for term in _INFO_INTENT_TERMS)
     return False
+
+
+def _has_event_context_hint(text: str) -> bool:
+    event_term = _matched_event_term(text)
+    return event_term is not None and _extract_named_entity(text, event_term) is not None
+
+
+def _matched_event_term(text: str) -> str | None:
+    for term in _EVENT_CONTEXT_TERMS:
+        if term in text:
+            return term
+    return None
+
+
+def _extract_named_entity(text: str, event_term: str | None = None) -> str | None:
+    if event_term:
+        index = text.find(event_term)
+        if index >= 0:
+            after = text[index + len(event_term): index + len(event_term) + 8]
+            match = _CHINESE_NAME_RE.search(after)
+            if match:
+                return match.group(0)
+
+            before = text[max(0, index - 8): index]
+            matches = list(_CHINESE_NAME_RE.finditer(before))
+            if matches:
+                return matches[-1].group(0)
+
+    match = _CHINESE_NAME_RE.search(text)
+    if match:
+        return match.group(0)
+    return None
 
 
 # Backward-compatible name while model/session code is migrated gradually.

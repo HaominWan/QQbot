@@ -56,6 +56,20 @@ class ApiWebSearchRoutingTests(unittest.TestCase):
     def test_chinese_year_query_is_time_sensitive(self):
         self.assertTrue(self.api._looks_time_sensitive("2026年张雪峰发生了什么事？"))
 
+    def test_event_meme_with_person_name_is_time_sensitive(self):
+        message = "一箱巧乐兹和复活张雪峰你选哪一个"
+
+        self.assertTrue(self.api._looks_time_sensitive(message))
+        self.assertEqual(self.api._search_query_for_message(message), "张雪峰 复活 最新")
+
+    def test_knowledge_gap_response_retries_with_search_for_event_context(self):
+        self.assertTrue(
+            self.api._should_retry_with_search(
+                "一箱巧乐兹和复活张雪峰你选哪一个",
+                "张雪峰是谁？丛雨不认识。",
+            )
+        )
+
     def test_user_can_disable_search_in_message(self):
         self.assertFalse(self.api._looks_time_sensitive("不要联网，2026年张雪峰发生了什么事？"))
 
