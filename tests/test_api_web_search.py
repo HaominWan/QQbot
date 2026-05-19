@@ -68,6 +68,18 @@ class ApiWebSearchRoutingTests(unittest.TestCase):
         self.assertTrue(self.api._looks_time_sensitive(message))
         self.assertEqual(self.api._search_query_for_message(message), "超时空辉夜姬 简介 剧情 评价")
 
+    def test_quoted_work_summary_and_review_query_uses_web_search(self):
+        message = "简述并评价“超时空辉夜姬”这个作品"
+
+        self.assertTrue(self.api._looks_time_sensitive(message))
+        self.assertEqual(self.api._search_query_for_message(message), "超时空辉夜姬 简介 剧情 评价")
+
+    def test_plain_work_summary_and_review_query_uses_web_search(self):
+        message = "简述并评价超时空辉夜姬这个作品"
+
+        self.assertTrue(self.api._looks_time_sensitive(message))
+        self.assertEqual(self.api._search_query_for_message(message), "超时空辉夜姬 简介 剧情 评价")
+
     def test_unbracketed_work_opinion_query_uses_web_search(self):
         message = "你对从零开始的异世界生活有什么看法"
 
