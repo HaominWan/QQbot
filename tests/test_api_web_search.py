@@ -1,0 +1,76 @@
+import importlib
+import sys
+import types
+import unittest
+from pathlib import Path
+
+
+BOT_DIR = Path(__file__).resolve().parents[1] / "Bot"
+if str(BOT_DIR) not in sys.path:
+    sys.path.insert(0, str(BOT_DIR))
+
+
+def load_api_with_fake_config():
+    previous_api = sys.modules.pop("api", None)
+    previous_config = sys.modules.get("config")
+
+    fake_config = types.ModuleType("config")
+    fake_config.DEEPSEEK_API_KEY = "REDACTED_API_KEY"
+    fake_config.DEEPSEEK_BASE_URL = "https://example.invalid"
+    fake_config.DEEPSEEK_MODEL = "deepseek-v4-flash"
+    fake_config.DEEPSEEK_TEMPERATURE = 0.75
+    fake_config.PROXY_URL = ""
+    fake_config.GROQ_API_KEY = ""
+    fake_config.WEB_SEARCH_ENABLED = True
+    fake_config.WEB_SEARCH_MAX_RESULTS = 4
+    fake_config.WEB_SEARCH_TIMEOUT_SECONDS = 10
+    fake_config.WEB_SEARCH_AUTO_FOR_TIME_SENSITIVE = True
+    fake_config.WEB_SEARCH_ALLOW_MODEL_REQUEST = True
+    sys.modules["config"] = fake_config
+
+    try:
+        module = importlib.import_module("api")
+    finally:
+        if previous_config is None:
+            sys.modules.pop("config", None)
+        else:
+            sys.modules["config"] = previous_config
+        if previous_api is not None:
+            sys.modules["_previous_api_for_test"] = previous_api
+
+    return module
+
+
+class ApiWebSearchRoutingTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.api = load_api_with_fake_config()
+
+    @classmethod
+    def tearDownClass(cls):
+        previous_api = sys.modules.pop("_previous_api_for_test", None)
+        sys.modules.pop("api", None)
+        if previous_api is not None:
+            sys.modules["api"] = previous_api
+
+    def test_chinese_year_query_is_time_sensitive(self):
+        self.assertTrue(self.api._looks_time_sensitive("2026年张雪峰发生了什么事？"))
+
+    def test_user_can_disable_search_in_message(self):
+        self.assertFalse(self.api._looks_time_sensitive("不要联网，2026年张雪峰发生了什么事？"))
+
+    def test_runtime_context_is_inserted_after_persona_system_prompt(self):
+        messages = self.api._with_runtime_context(
+            [
+                {"role": "system", "content": "persona"},
+                {"role": "user", "content": "hi"},
+            ]
+        )
+
+        self.assertEqual(messages[0]["content"], "persona")
+        self.assertIn("current local date", messages[1]["content"])
+        self.assertEqual(messages[2]["content"], "hi")
+
+
+if __name__ == "__main__":
+    unittest.main()

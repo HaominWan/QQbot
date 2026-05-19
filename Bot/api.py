@@ -28,6 +28,13 @@ _WEB_CONTEXT_INSTRUCTION = (
     "mention uncertainty if the search results are weak or conflicting, and include "
     "source names or URLs briefly when using factual claims from search."
 )
+_RUNTIME_CONTEXT_INSTRUCTION = (
+    "Runtime context: current local date is {date}; current local time is {time}; "
+    "local timezone is {timezone}. Treat this runtime context as authoritative over "
+    "model training dates. If the user asks about a date that is on or before the "
+    "current local date, do not claim it is in the future. For current or recent facts, "
+    "use web search when available instead of relying on memory."
+)
 _CURRENT_INFO_TERMS = (
     "最新",
     "热点",
@@ -218,6 +225,8 @@ async def _call_deepseek_api(chat_history):
     if not DEEPSEEK_API_KEY:
         raise RuntimeError("DeepSeek API key is not configured")
 
+    chat_history = _with_runtime_context(chat_history)
+
     request_payload = dict(
         model=DEEPSEEK_MODEL,
         messages=chat_history,
@@ -280,12 +289,22 @@ def _with_search_instruction(chat_history):
     )
 
 
-def _with_web_context(chat_history, context: str):
-    instruction = (
-        f"{_WEB_CONTEXT_INSTRUCTION}\n"
-        f"Current local date: {datetime.now().date().isoformat()}"
+def _with_runtime_context(chat_history):
+    now = datetime.now().astimezone()
+    timezone = now.tzname() or now.strftime("%z") or "local"
+    content = _RUNTIME_CONTEXT_INSTRUCTION.format(
+        date=now.date().isoformat(),
+        time=now.strftime("%H:%M:%S"),
+        timezone=timezone,
     )
-    messages = _insert_after_first_system(chat_history, {"role": "system", "content": instruction})
+    return _insert_after_first_system(chat_history, {"role": "system", "content": content})
+
+
+def _with_web_context(chat_history, context: str):
+    messages = _insert_after_first_system(
+        chat_history,
+        {"role": "system", "content": _WEB_CONTEXT_INSTRUCTION},
+    )
     messages.append(
         {
             "role": "user",
@@ -323,7 +342,7 @@ def _looks_time_sensitive(message: str) -> bool:
         return True
     if any(term in text for term in _TIME_HINT_TERMS):
         return any(term in text for term in _INFO_INTENT_TERMS)
-    if re.search(r"\b20\d{2}\b", text):
+    if re.search(r"20\d{2}", text):
         return any(term in text for term in _INFO_INTENT_TERMS)
     return False
 
