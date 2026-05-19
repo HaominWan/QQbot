@@ -38,6 +38,13 @@ DEEPSEEK_BASE_URL = model_settings.get("deepseek_base_url", "https://api.deepsee
 DEEPSEEK_MODEL = model_settings.get("deepseek_model", "deepseek-v4-flash")
 DEEPSEEK_TEMPERATURE = float(model_settings.get("deepseek_temperature", 0.75))
 
+_web_search = config_data.get("web_search_settings", {})
+WEB_SEARCH_ENABLED = bool(_web_search.get("enabled", True))
+WEB_SEARCH_MAX_RESULTS = int(_web_search.get("max_results", 4))
+WEB_SEARCH_TIMEOUT_SECONDS = float(_web_search.get("timeout_seconds", 10))
+WEB_SEARCH_AUTO_FOR_TIME_SENSITIVE = bool(_web_search.get("auto_for_time_sensitive", True))
+WEB_SEARCH_ALLOW_MODEL_REQUEST = bool(_web_search.get("allow_model_request", True))
+
 def _int_list(values, field_name: str) -> list[int]:
     normalized = []
     for value in values:

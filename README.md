@@ -10,6 +10,7 @@
 |------|------|
 | 角色扮演 | 内置丛雨人格（主人/守护模式），傲娇恋人风格，支持表情包辅助情绪表达 |
 | 长期记忆 | 群消息用 FastEmbed 向量化并存入 SQLite，LLM 调用时混合检索相关历史作为上下文 |
+| 联网搜索 | 遇到热点、新闻、价格、天气、赛程等时效问题时自动检索网页并注入回答上下文 |
 | 图片识别 | 消息含图片时自动调用 HuggingFace BLIP 识别并告知 AI |
 | 视频分析 | 调用 Gemini 2.0 Flash 分析视频内容 |
 | 语音转文字 | 调用 Groq Whisper 转录语音消息 |
@@ -88,6 +89,13 @@ npm install markdown-it markdown-it-texmath katex puppeteer
     "deepseek_model":       "deepseek-v4-flash",
     "deepseek_temperature": 0.75
   },
+  "web_search_settings": {
+    "enabled": true,
+    "max_results": 4,
+    "timeout_seconds": 10,
+    "auto_for_time_sensitive": true,
+    "allow_model_request": true
+  },
   "bot_settings": {
     "super_users": [你的QQ号],
     "test_groups":  [启用Bot的群号],
@@ -119,6 +127,10 @@ npm install markdown-it markdown-it-texmath katex puppeteer
 | 字段 | 用途 | 是否必填 |
 |------|------|----------|
 | `deepseek` | 主对话模型 | 必填 |
+| `web_search_settings.enabled` | 是否启用联网搜索增强 | 默认 true |
+| `web_search_settings.max_results` | 每次注入 LLM 的搜索结果数量 | 默认 4 |
+| `web_search_settings.auto_for_time_sensitive` | 遇到明显时效问题时是否直接搜索 | 默认 true |
+| `web_search_settings.allow_model_request` | 是否允许模型通过 `<web_search>` 标记主动请求搜索 | 默认 true |
 | `gemini` | 视频分析（google-genai） | 推荐填写 |
 | `groq` | 语音转文字（Whisper） | 可选 |
 | `hf_token` | HuggingFace Token，图片识别与 AI 绘图必填（免费账号即可） | 必填 |
@@ -213,6 +225,7 @@ QQBot/
 │   ├── persona_engine.py       # 人格系统（主人/守护模式判断）
 │   ├── session_manager.py      # 会话管理（私聊/群聊上下文）
 │   ├── api.py                  # DeepSeek API 封装（含重试）
+│   ├── web_search.py           # 联网搜索模块（DuckDuckGo HTML/API 回退）
 │   ├── config.py               # 配置加载
 │   ├── command_handlers.py     # 命令解析与分发
 │   ├── config.example.json     # 配置模板

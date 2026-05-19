@@ -14,6 +14,13 @@
     "deepseek_model": "deepseek-v4-flash",
     "deepseek_temperature": 0.75
   },
+  "web_search_settings": {
+    "enabled": true,
+    "max_results": 4,
+    "timeout_seconds": 10,
+    "auto_for_time_sensitive": true,
+    "allow_model_request": true
+  },
   "bot_settings": {
     "super_users": [123456789],
     "test_groups": [123456789],
