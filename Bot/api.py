@@ -32,8 +32,9 @@ _WEB_CONTEXT_INSTRUCTION = (
     "requested work/entity, say that clearly instead of inventing names, studios, dates, "
     "plots, characters, or evaluations."
 )
+# Keep this date-scoped; second-level time here would break DeepSeek prefix caching.
 _RUNTIME_CONTEXT_INSTRUCTION = (
-    "Runtime context: current local date is {date}; current local time is {time}; "
+    "Runtime context: current local date is {date}; "
     "local timezone is {timezone}. Treat this runtime context as authoritative over "
     "model training dates. If the user asks about a date that is on or before the "
     "current local date, do not claim it is in the future. For current or recent facts, "
@@ -434,7 +435,6 @@ def _with_runtime_context(chat_history):
     timezone = now.tzname() or now.strftime("%z") or "local"
     content = _RUNTIME_CONTEXT_INSTRUCTION.format(
         date=now.date().isoformat(),
-        time=now.strftime("%H:%M:%S"),
         timezone=timezone,
     )
     return _insert_after_first_system(chat_history, {"role": "system", "content": content})

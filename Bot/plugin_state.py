@@ -152,6 +152,69 @@ class GroupBotBanStore:
         return True
 
 
+class GroupAgentModeStore:
+    """Persists groups where autonomous group-agent replies are enabled."""
+
+    def __init__(self, path: Path):
+        self.path = path
+
+    @staticmethod
+    def _group_key(group_id: int | str) -> str:
+        return str(group_id).strip()
+
+    def _load(self) -> list[str]:
+        if not self.path.exists():
+            return []
+
+        try:
+            with self.path.open("r", encoding="utf-8") as f:
+                data: Any = json.load(f)
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"[PluginState] Failed to read {self.path}: {exc}")
+            return []
+
+        if isinstance(data, dict):
+            groups = data.get("groups", [])
+        else:
+            groups = data
+
+        if not isinstance(groups, list):
+            return []
+
+        return sorted({self._group_key(group) for group in groups if self._group_key(group)})
+
+    def _save(self, groups: list[str]) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = self.path.with_suffix(f"{self.path.suffix}.tmp")
+        with tmp_path.open("w", encoding="utf-8") as f:
+            json.dump({"groups": sorted(groups)}, f, ensure_ascii=False, indent=2)
+            f.write("\n")
+        os.replace(tmp_path, self.path)
+
+    def is_enabled(self, group_id: int | str) -> bool:
+        return self._group_key(group_id) in self._load()
+
+    def enable(self, group_id: int | str) -> bool:
+        group_key = self._group_key(group_id)
+        groups = set(self._load())
+        if not group_key or group_key in groups:
+            return False
+
+        groups.add(group_key)
+        self._save(sorted(groups))
+        return True
+
+    def disable(self, group_id: int | str) -> bool:
+        group_key = self._group_key(group_id)
+        groups = set(self._load())
+        if group_key not in groups:
+            return False
+
+        groups.remove(group_key)
+        self._save(sorted(groups))
+        return True
+
+
 class UserBanStore:
     """Persists users the bot should ignore globally."""
 

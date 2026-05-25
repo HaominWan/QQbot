@@ -125,6 +125,7 @@ class ApiWebSearchRoutingTests(unittest.TestCase):
 
         self.assertEqual(messages[0]["content"], "persona")
         self.assertIn("current local date", messages[1]["content"])
+        self.assertNotIn("current local time", messages[1]["content"])
         self.assertEqual(messages[2]["content"], "hi")
 
 

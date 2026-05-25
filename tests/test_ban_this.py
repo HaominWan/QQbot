@@ -59,6 +59,7 @@ class BanThisCommandTests(unittest.TestCase):
             {},
         )
         handler.group_bot_bans = self.plugin_state.GroupBotBanStore(data_dir / "group_bot_bans.json")
+        handler.group_agent_modes = self.plugin_state.GroupAgentModeStore(data_dir / "group_agent_modes.json")
         handler.group_plugin_bans = self.plugin_state.GroupPluginBanStore(data_dir / "group_plugin_bans.json")
         handler.user_bans = self.plugin_state.UserBanStore(data_dir / "banned_users.json")
         return handler, sent_group
@@ -155,6 +156,57 @@ class BanThisCommandTests(unittest.TestCase):
             self.assertTrue(handled)
             self.assertEqual(observed, [(group_id, "recommend 3", False)])
             self.assertTrue(handler.group_plugin_bans.is_banned(group_id, "jm"))
+
+    def test_agent_mode_defaults_off_and_super_user_can_toggle_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            handler, sent = self.make_handler(Path(tmp))
+            group_id = 100
+
+            self.assertFalse(handler.is_group_agent_enabled(group_id))
+
+            asyncio.run(
+                handler.handle_command(
+                    None,
+                    self.command_handlers.MessageType.GROUP,
+                    self.command_handlers.CommandType.AGENT,
+                    ".agent on",
+                    group_id=group_id,
+                    user_id=1,
+                )
+            )
+            self.assertTrue(handler.is_group_agent_enabled(group_id))
+            self.assertIn("已启用本群自主回复模式", sent[-1][1])
+
+            asyncio.run(
+                handler.handle_command(
+                    None,
+                    self.command_handlers.MessageType.GROUP,
+                    self.command_handlers.CommandType.AGENT,
+                    ".agent off",
+                    group_id=group_id,
+                    user_id=1,
+                )
+            )
+            self.assertFalse(handler.is_group_agent_enabled(group_id))
+            self.assertIn("已关闭本群自主回复模式", sent[-1][1])
+
+    def test_agent_mode_rejects_non_super_user(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            handler, sent = self.make_handler(Path(tmp))
+
+            asyncio.run(
+                handler.handle_command(
+                    None,
+                    self.command_handlers.MessageType.GROUP,
+                    self.command_handlers.CommandType.AGENT,
+                    ".agent on",
+                    group_id=100,
+                    user_id=2,
+                )
+            )
+
+            self.assertFalse(handler.is_group_agent_enabled(100))
+            self.assertIn("权限不足", sent[-1][1])
 
 
 class MutedGroupOrchestratorTests(unittest.TestCase):
@@ -253,6 +305,58 @@ class MutedGroupOrchestratorTests(unittest.TestCase):
 
         self.assertTrue(result.handled)
         self.assertTrue(command_handler.handled)
+
+
+class AutonomousGroupAgentDecisionTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        install_plugin_stubs()
+        cls.agent_orchestrator = importlib.import_module("agent_orchestrator")
+
+    def make_orchestrator(self, enabled: bool):
+        class FakeCommandHandler:
+            def get_command_type(self, _message_content):
+                return None
+
+            def is_group_agent_enabled(self, _group_id):
+                return enabled
+
+        interfaces = {
+            "bot_qq": 42,
+            "test_if_super_user": lambda _user_id: False,
+        }
+        return self.agent_orchestrator.AgentOrchestrator(
+            interfaces,
+            FakeCommandHandler(),
+            persona_engine=None,
+            session_manager=types.SimpleNamespace(memory=None),
+            multimodal_processor=lambda _segments, content: asyncio.sleep(0, result=content),
+        )
+
+    def test_autonomous_group_agent_is_disabled_by_default(self):
+        orchestrator = self.make_orchestrator(enabled=False)
+
+        decision = orchestrator.decide_group(100, "有人知道什么是模型蒸馏吗？", [])
+
+        self.assertEqual(decision.action, self.agent_orchestrator.AgentAction.IGNORE)
+        self.assertEqual(decision.reason, "group agent mode is disabled")
+
+    def test_autonomous_group_agent_answers_public_help_question(self):
+        orchestrator = self.make_orchestrator(enabled=True)
+
+        decision = orchestrator.decide_group(100, "有人知道什么是模型蒸馏吗？", [])
+
+        self.assertEqual(decision.action, self.agent_orchestrator.AgentAction.CHAT)
+        self.assertEqual(decision.reason, "autonomous public help question")
+
+    def test_autonomous_group_agent_routes_jm_recommendation_cue(self):
+        orchestrator = self.make_orchestrator(enabled=True)
+
+        decision = orchestrator.decide_group(100, "今天还没看jm本子", [])
+
+        self.assertEqual(decision.action, self.agent_orchestrator.AgentAction.TOOL)
+        self.assertEqual(decision.command_type.value, "jm")
+        self.assertEqual(decision.message_content, ".jm recommend")
 
 
 if __name__ == "__main__":

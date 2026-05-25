@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
-from command_handlers import MessageType
+from command_handlers import CommandType, MessageType
 from plugins.markdown import markdown_to_image
 from plugins.stickers import sticker_to_segment
 
@@ -12,6 +12,14 @@ _SPECIAL_RE   = re.compile(r'(<render_md>.*?</render_md>|<sticker:\w+>)', re.DOT
 _RENDER_MD_RE = re.compile(r'<render_md>(.*?)</render_md>', re.DOTALL)
 _STICKER_RE   = re.compile(r'<sticker:(\w+)>')
 _CQ_RE        = re.compile(r'\[CQ:[^\]]*\]')
+_JM_AUTONOMOUS_RE = re.compile(
+    r"(?:今天|今日|最近|还没|没看|想看|推荐|来点|有没有).{0,16}(?:jm|JM|本子)"
+    r"|(?:jm|JM|本子).{0,16}(?:推荐|来点|看看|没看|想看)"
+)
+_HELP_QUESTION_RE = re.compile(
+    r"(?:有人知道|有没有人知道|谁知道|求问|请问|想问一下).{0,80}"
+    r"(?:是什么|什么是|怎么|如何|为什么|为啥|能不能|可以吗|吗|\?)"
+)
 
 
 MultimodalProcessor = Callable[[list, str], Awaitable[str]]
@@ -28,6 +36,7 @@ class AgentDecision:
     action: AgentAction
     reason: str
     command_type: Optional[Any] = None
+    message_content: Optional[str] = None
 
 
 @dataclass
@@ -95,18 +104,19 @@ class AgentOrchestrator:
         if memory:
             memory.store(group_id, user_id, message_content, "user")
 
-        decision = self.decide_group(message_content, segments)
+        decision = self.decide_group(group_id, message_content, segments)
         print(f"[Agent] group decision={decision.action.value} reason={decision.reason}")
 
         if decision.action == AgentAction.IGNORE:
             return AgentRunResult(False, decision.action, decision.reason)
 
         if decision.action == AgentAction.TOOL:
+            tool_message = decision.message_content or message_content
             handled = await self.command_handler.handle_command(
                 ws,
                 MessageType.GROUP,
                 decision.command_type,
-                message_content,
+                tool_message,
                 group_id=group_id,
                 user_id=user_id,
                 message_id=message_id,
@@ -217,7 +227,7 @@ class AgentOrchestrator:
                     print(f"[Agent] sticker not found: {name}")
         return result
 
-    def decide_group(self, message_content: str, segments: list) -> AgentDecision:
+    def decide_group(self, group_id: int, message_content: str, segments: list) -> AgentDecision:
         command_type = self.command_handler.get_command_type(message_content)
         if command_type:
             return AgentDecision(AgentAction.TOOL, "matched explicit command", command_type)
@@ -225,7 +235,32 @@ class AgentOrchestrator:
         if self._is_at_me(segments):
             return AgentDecision(AgentAction.CHAT, "bot was mentioned")
 
+        if not self.command_handler.is_group_agent_enabled(group_id):
+            return AgentDecision(AgentAction.IGNORE, "group agent mode is disabled")
+
+        autonomous_decision = self._decide_autonomous_group(message_content)
+        if autonomous_decision:
+            return autonomous_decision
+
         return AgentDecision(AgentAction.IGNORE, "group message did not mention bot")
+
+    def _decide_autonomous_group(self, message_content: str) -> Optional[AgentDecision]:
+        text = _CQ_RE.sub("", message_content or "").strip()
+        if not text:
+            return None
+
+        if _JM_AUTONOMOUS_RE.search(text):
+            return AgentDecision(
+                AgentAction.TOOL,
+                "autonomous jm recommendation cue",
+                CommandType.JM,
+                ".jm recommend",
+            )
+
+        if _HELP_QUESTION_RE.search(text):
+            return AgentDecision(AgentAction.CHAT, "autonomous public help question")
+
+        return None
 
     def decide_private(self, message_content: str) -> AgentDecision:
         command_type = self.command_handler.get_command_type(message_content)

@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Optional
 
 from plugins import P5_card, YGO_find_card, drawing, jm2pdf, markdown, pixiv, typst_renderer
-from plugin_state import GroupBotBanStore, GroupPluginBanStore, UserBanStore
+from plugin_state import GroupAgentModeStore, GroupBotBanStore, GroupPluginBanStore, UserBanStore
 from tool_router import Tool, ToolRouter, ToolScope
 
 _BOT_DIR = Path(__file__).resolve().parent
@@ -32,6 +32,7 @@ class CommandType(Enum):
     PIXIV = "pixiv"
     BAN = "ban"
     UNBAN = "unban"
+    AGENT = "agent"
 
 
 class MessageType(Enum):
@@ -48,6 +49,7 @@ class CommandHandler:
         self.session_manager = session_manager
         self.tool_router = ToolRouter()
         self.group_bot_bans = GroupBotBanStore(_BOT_DIR / "data" / "group_bot_bans.json")
+        self.group_agent_modes = GroupAgentModeStore(_BOT_DIR / "data" / "group_agent_modes.json")
         self.group_plugin_bans = GroupPluginBanStore(_BOT_DIR / "data" / "group_plugin_bans.json")
         self.user_bans = UserBanStore(_BOT_DIR / "data" / "banned_users.json")
         self.help_message = """========================
@@ -57,6 +59,7 @@ class CommandHandler:
 .stop              强制停止 Bot        ★
 .clean             清空当前群记忆      ★
 .ban / .unban      禁用管理            ★
+.agent on/off      群聊自主回复模式    ★
 .draw              AI 绘图
 .typ / .typst      Typst 渲染
 .md / .markdown    Markdown 渲染
@@ -118,6 +121,16 @@ class CommandHandler:
 
 .unban user:<QQ号>
 解除指定用户的回复封禁。""",
+            "agent": """Agent 模式语法
+
+.agent on
+在当前群启用自主回复模式。启用后，Bot 会在未 @ 的消息中只对高置信度求助或工具意图插话。
+
+.agent off
+关闭当前群自主回复模式，恢复默认的命令 / @ 才响应。
+
+.agent status
+查看当前群自主回复模式状态。""",
         }
         self._register_tools()
 
@@ -175,6 +188,15 @@ class CommandHandler:
                     group_handler=self._handle_unban_group,
                     private_handler=self._handle_unban_private,
                     description="启用本群插件",
+                    super_only=True,
+                ),
+                Tool(
+                    name="agent",
+                    command_type=CommandType.AGENT,
+                    prefixes=[".agent"],
+                    group_handler=self._handle_agent_group,
+                    private_handler=self._handle_agent_private,
+                    description="群聊自主回复模式",
                     super_only=True,
                 ),
                 Tool(
@@ -254,6 +276,9 @@ class CommandHandler:
 
     def is_group_bot_banned(self, group_id: int | str) -> bool:
         return self.group_bot_bans.is_banned(group_id)
+
+    def is_group_agent_enabled(self, group_id: int | str) -> bool:
+        return self.group_agent_modes.is_enabled(group_id)
 
     def split_command_chain(self, message_content: str) -> list[str]:
         if "&&" not in message_content:
@@ -471,6 +496,48 @@ class CommandHandler:
 
     async def _handle_clean_private(self, ws, message_content: str, user_id: int, **kwargs):
         await self._send_private_text(ws, user_id, "私聊暂无向量记忆可清理")
+
+    async def _handle_agent_group(
+        self,
+        ws,
+        message_content: str,
+        group_id: int,
+        user_id: int,
+        **kwargs,
+    ):
+        if not self.bot_interfaces["test_if_super_user"](user_id):
+            await self._send_group_text(ws, group_id, "权限不足，仅超级用户可切换 Agent 模式")
+            return
+
+        action = self.extract_command_content(message_content, CommandType.AGENT).strip().lower()
+        if action in {"on", "enable", "enabled", "start", "开启", "启用", "打开"}:
+            changed = self.group_agent_modes.enable(group_id)
+            if changed:
+                await self._send_group_text(ws, group_id, "已启用本群自主回复模式")
+            else:
+                await self._send_group_text(ws, group_id, "本群自主回复模式已经启用")
+            return
+
+        if action in {"off", "disable", "disabled", "stop", "关闭", "停用", "禁用"}:
+            changed = self.group_agent_modes.disable(group_id)
+            if changed:
+                await self._send_group_text(ws, group_id, "已关闭本群自主回复模式")
+            else:
+                await self._send_group_text(ws, group_id, "本群自主回复模式本来就是关闭状态")
+            return
+
+        if action in {"", "status", "状态"}:
+            status = "启用" if self.group_agent_modes.is_enabled(group_id) else "关闭"
+            await self._send_group_text(ws, group_id, f"本群自主回复模式：{status}")
+            return
+
+        await self._send_group_text(ws, group_id, "用法：.agent on / .agent off / .agent status")
+
+    async def _handle_agent_private(self, ws, message_content: str, user_id: int, **kwargs):
+        if not self.bot_interfaces["test_if_super_user"](user_id):
+            await self._send_private_text(ws, user_id, "权限不足，仅超级用户可切换 Agent 模式")
+            return
+        await self._send_private_text(ws, user_id, "Agent 模式只对群聊生效，请在目标群内使用 .agent on / .agent off")
 
     def _manageable_tool_names(self) -> str:
         return "、".join(tool.name for tool in self.tool_router.controllable_tools())
