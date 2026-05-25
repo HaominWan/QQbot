@@ -171,6 +171,20 @@ class GroupAgentModeStore:
         return str(group_id).strip()
 
     def _load(self) -> list[str]:
+        """从持久化存储（JSON文件）加载启用群组列表。
+
+        返回格式：按群组ID排序的字符串列表
+
+        容错处理：
+        - 如果文件不存在，返回空列表
+        - 如果文件读取失败，返回空列表并输出错误日志
+        - 如果JSON格式无效，返回空列表
+        - 如果groups字段不是列表，返回空列表
+        - 清理无效的群组ID（空字符串等）
+
+        Returns:
+            排序后的启用群组ID列表
+        """
         if not self.path.exists():
             return []
 
@@ -192,6 +206,17 @@ class GroupAgentModeStore:
         return sorted({self._group_key(group) for group in groups if self._group_key(group)})
 
     def _save(self, groups: list[str]) -> None:
+        """将启用群组列表持久化到JSON文件。
+
+        过程：
+        1. 创建数据目录（如果不存在）
+        2. 生成临时文件用于原子性写入（避免文件损坏）
+        3. 将数据以JSON格式写入临时文件，使用缩进和中文可读性
+        4. 原子性替换原文件（确保即使中途断电也不会损坏原文件）
+
+        Args:
+            groups: 已排序的群组ID列表
+        """
         self.path.parent.mkdir(parents=True, exist_ok=True)
         tmp_path = self.path.with_suffix(f"{self.path.suffix}.tmp")
         with tmp_path.open("w", encoding="utf-8") as f:
@@ -200,9 +225,33 @@ class GroupAgentModeStore:
         os.replace(tmp_path, self.path)
 
     def is_enabled(self, group_id: int | str) -> bool:
+        """检查指定群组的自主回复模式是否已启用。
+
+        Args:
+            group_id: 群组ID
+
+        Returns:
+            True if 该群已启用自主回复模式, False otherwise
+
+        实现细节：从JSON文件加载最新的启用列表，然后检查该group_id是否在列表中
+        """
         return self._group_key(group_id) in self._load()
 
     def enable(self, group_id: int | str) -> bool:
+        """在指定群组启用自主回复模式。
+
+        Args:
+            group_id: 群组ID
+
+        Returns:
+            True if 状态发生了变化（从禁用→启用）, False if 已经是启用状态
+
+        操作流程：
+        1. 从持久化存储加载当前启用列表
+        2. 检查该群组是否已经在列表中
+        3. 如果不在列表中，将其添加到列表
+        4. 保存更新后的列表回持久化存储
+        """
         group_key = self._group_key(group_id)
         groups = set(self._load())
         if not group_key or group_key in groups:
@@ -213,6 +262,21 @@ class GroupAgentModeStore:
         return True
 
     def disable(self, group_id: int | str) -> bool:
+        """在指定群组禁用自主回复模式。
+
+        Args:
+            group_id: 群组ID
+
+        Returns:
+            True if 状态发生了变化（从启用→禁用）, False if 已经是禁用状态
+
+        操作流程：
+        1. 从持久化存储加载当前启用列表
+        2. 检查该群组是否在列表中
+        3. 如果在列表中，将其移除
+        4. 如果移除后列表为空，则删除该群组的记录
+        5. 保存更新后的列表回持久化存储
+        """
         group_key = self._group_key(group_id)
         groups = set(self._load())
         if group_key not in groups:

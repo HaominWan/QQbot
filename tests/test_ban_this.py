@@ -215,8 +215,6 @@ class MutedGroupOrchestratorTests(unittest.TestCase):
         install_plugin_stubs()
         cls.agent_orchestrator = importlib.import_module("agent_orchestrator")
         cls.command_handlers = importlib.import_module("command_handlers")
-        cls.command_handlers = importlib.import_module("command_handlers")
-        cls.command_handlers = importlib.import_module("command_handlers")
 
     def test_muted_group_ignores_non_unban_messages(self):
         class FakeCommandHandler:
@@ -314,6 +312,7 @@ class AutonomousGroupAgentDecisionTests(unittest.TestCase):
     def setUpClass(cls):
         install_plugin_stubs()
         cls.agent_orchestrator = importlib.import_module("agent_orchestrator")
+        cls.command_handlers = importlib.import_module("command_handlers")
 
     def make_orchestrator(self, enabled: bool, recommendations: list[dict] | None = None):
         class FakeCommandHandler:
@@ -353,6 +352,22 @@ class AutonomousGroupAgentDecisionTests(unittest.TestCase):
         orchestrator = self.make_orchestrator(enabled=True)
 
         decision = orchestrator.decide_group(100, "有人知道什么是模型蒸馏吗？", [])
+
+        self.assertEqual(decision.action, self.agent_orchestrator.AgentAction.CHAT)
+        self.assertEqual(decision.reason, "autonomous public help question")
+
+    def test_autonomous_group_agent_answers_direct_public_question(self):
+        orchestrator = self.make_orchestrator(enabled=True)
+
+        decision = orchestrator.decide_group(100, "模型蒸馏是什么？", [])
+
+        self.assertEqual(decision.action, self.agent_orchestrator.AgentAction.CHAT)
+        self.assertEqual(decision.reason, "autonomous public help question")
+
+    def test_autonomous_group_agent_answers_whether_question(self):
+        orchestrator = self.make_orchestrator(enabled=True)
+
+        decision = orchestrator.decide_group(100, "这样会不会减少缓存命中率？", [])
 
         self.assertEqual(decision.action, self.agent_orchestrator.AgentAction.CHAT)
         self.assertEqual(decision.reason, "autonomous public help question")
@@ -423,6 +438,24 @@ class AutonomousGroupAgentDecisionTests(unittest.TestCase):
         self.assertEqual(decision.command_type.value, "pixiv")
         self.assertEqual(decision.message_content, ".pixiv recommend")
 
+    def test_autonomous_group_agent_routes_bare_pixiv_recommendation(self):
+        orchestrator = self.make_orchestrator(enabled=True)
+
+        decision = orchestrator.decide_group(100, "给我来点pixiv", [])
+
+        self.assertEqual(decision.action, self.agent_orchestrator.AgentAction.TOOL)
+        self.assertEqual(decision.command_type.value, "pixiv")
+        self.assertEqual(decision.message_content, ".pixiv recommend")
+
+    def test_autonomous_group_agent_routes_pixiv_search_after_cue(self):
+        orchestrator = self.make_orchestrator(enabled=True)
+
+        decision = orchestrator.decide_group(100, "来点pixiv 斯卡蒂", [])
+
+        self.assertEqual(decision.action, self.agent_orchestrator.AgentAction.TOOL)
+        self.assertEqual(decision.command_type.value, "pixiv")
+        self.assertEqual(decision.message_content, ".pixiv 斯卡蒂")
+
     def test_autonomous_group_agent_routes_pixiv_pid(self):
         orchestrator = self.make_orchestrator(enabled=True)
 
@@ -440,6 +473,15 @@ class AutonomousGroupAgentDecisionTests(unittest.TestCase):
         self.assertEqual(decision.command_type.value, "YGO")
         self.assertEqual(decision.message_content, ".YGO 青眼白龙")
 
+    def test_autonomous_group_agent_routes_reversed_ygo_lookup(self):
+        orchestrator = self.make_orchestrator(enabled=True)
+
+        decision = orchestrator.decide_group(100, "查一下青眼白龙这张游戏王卡", [])
+
+        self.assertEqual(decision.action, self.agent_orchestrator.AgentAction.TOOL)
+        self.assertEqual(decision.command_type.value, "YGO")
+        self.assertEqual(decision.message_content, ".YGO 青眼白龙")
+
     def test_autonomous_group_agent_routes_drawing_request(self):
         orchestrator = self.make_orchestrator(enabled=True)
 
@@ -448,6 +490,24 @@ class AutonomousGroupAgentDecisionTests(unittest.TestCase):
         self.assertEqual(decision.action, self.agent_orchestrator.AgentAction.TOOL)
         self.assertEqual(decision.command_type.value, "draw")
         self.assertEqual(decision.message_content, ".draw 一只猫坐在键盘上")
+
+    def test_autonomous_group_agent_routes_short_drawing_request(self):
+        orchestrator = self.make_orchestrator(enabled=True)
+
+        decision = orchestrator.decide_group(100, "画张猫猫", [])
+
+        self.assertEqual(decision.action, self.agent_orchestrator.AgentAction.TOOL)
+        self.assertEqual(decision.command_type.value, "draw")
+        self.assertEqual(decision.message_content, ".draw 猫猫")
+
+    def test_autonomous_group_agent_routes_generated_image_request(self):
+        orchestrator = self.make_orchestrator(enabled=True)
+
+        decision = orchestrator.decide_group(100, "生成图片 猫猫", [])
+
+        self.assertEqual(decision.action, self.agent_orchestrator.AgentAction.TOOL)
+        self.assertEqual(decision.command_type.value, "draw")
+        self.assertEqual(decision.message_content, ".draw 猫猫")
 
     def test_autonomous_group_agent_routes_p5_card_request(self):
         orchestrator = self.make_orchestrator(enabled=True)
@@ -525,6 +585,120 @@ class AutonomousGroupAgentDecisionTests(unittest.TestCase):
         self.assertEqual(command_handler.calls[0][0], self.command_handlers.MessageType.GROUP)
         self.assertEqual(command_handler.calls[0][1].value, "jm")
         self.assertEqual(command_handler.calls[0][2], ".jm 1436338")
+
+    def test_handle_group_message_routes_autonomous_non_jm_tool(self):
+        class FakeCommandHandler:
+            def __init__(self):
+                self.calls = []
+
+            def is_user_banned(self, _user_id):
+                return False
+
+            def is_group_bot_banned(self, _group_id):
+                return False
+
+            def get_command_type(self, _message_content):
+                return None
+
+            def is_group_agent_enabled(self, _group_id):
+                return True
+
+            def recent_jm_recommendation_at(self, _group_id, _index):
+                return None, 0
+
+            async def handle_command(self, _ws, message_type, command_type, message_content, **kwargs):
+                self.calls.append((message_type, command_type, message_content, kwargs))
+                return True
+
+        command_handler = FakeCommandHandler()
+        interfaces = {
+            "bot_qq": 42,
+            "test_if_super_user": lambda _user_id: False,
+            "encode_message_to_CQ": lambda _segments: asyncio.sleep(0, result="给我来点pixiv"),
+        }
+        orchestrator = self.agent_orchestrator.AgentOrchestrator(
+            interfaces,
+            command_handler,
+            persona_engine=None,
+            session_manager=types.SimpleNamespace(memory=None),
+            multimodal_processor=lambda _segments, content: asyncio.sleep(0, result=content),
+        )
+
+        result = asyncio.run(
+            orchestrator.handle_group_message(
+                None,
+                {"group_id": 100, "user_id": 2, "message": [{"type": "text", "data": {"text": "x"}}]},
+            )
+        )
+
+        self.assertTrue(result.handled)
+        self.assertEqual(command_handler.calls[0][0], self.command_handlers.MessageType.GROUP)
+        self.assertEqual(command_handler.calls[0][1].value, "pixiv")
+        self.assertEqual(command_handler.calls[0][2], ".pixiv recommend")
+
+    def test_handle_group_message_answers_autonomous_public_question(self):
+        class FakeCommandHandler:
+            def is_user_banned(self, _user_id):
+                return False
+
+            def is_group_bot_banned(self, _group_id):
+                return False
+
+            def get_command_type(self, _message_content):
+                return None
+
+            def is_group_agent_enabled(self, _group_id):
+                return True
+
+            def recent_jm_recommendation_at(self, _group_id, _index):
+                return None, 0
+
+        class FakePersonaEngine:
+            def prepare(self, _user_id, message_content):
+                return types.SimpleNamespace(
+                    message_content=message_content,
+                    system_role="",
+                    blocked_override=False,
+                    blocked_reasons=[],
+                    mode="normal",
+                )
+
+        class FakeGroupSession:
+            async def handle_message(self, _user_id, message_content, _system_role, **_kwargs):
+                self.message_content = message_content
+                return "模型蒸馏是把大模型能力迁移到小模型的一类训练方法。"
+
+        sent = []
+        group_session = FakeGroupSession()
+        interfaces = {
+            "bot_qq": 42,
+            "test_if_super_user": lambda _user_id: False,
+            "encode_message_to_CQ": lambda _segments: asyncio.sleep(0, result="模型蒸馏是什么？"),
+            "decode_CQ_to_message": lambda text: asyncio.sleep(0, result=text),
+            "send_group_message": lambda _ws, group_id, message: asyncio.sleep(0, result=sent.append((group_id, message))),
+        }
+        orchestrator = self.agent_orchestrator.AgentOrchestrator(
+            interfaces,
+            FakeCommandHandler(),
+            persona_engine=FakePersonaEngine(),
+            session_manager=types.SimpleNamespace(
+                memory=None,
+                get_group_session=lambda _group_id: group_session,
+            ),
+            multimodal_processor=lambda _segments, content: asyncio.sleep(0, result=content),
+        )
+
+        result = asyncio.run(
+            orchestrator.handle_group_message(
+                None,
+                {"group_id": 100, "user_id": 2, "message": [{"type": "text", "data": {"text": "x"}}]},
+            )
+        )
+
+        self.assertTrue(result.handled)
+        self.assertEqual(result.action, self.agent_orchestrator.AgentAction.CHAT)
+        self.assertEqual(group_session.message_content, "模型蒸馏是什么？")
+        self.assertEqual(sent, [(100, "模型蒸馏是把大模型能力迁移到小模型的一类训练方法。")])
 
 
 if __name__ == "__main__":

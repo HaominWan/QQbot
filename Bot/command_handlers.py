@@ -287,6 +287,21 @@ class CommandHandler:
         return self.group_bot_bans.is_banned(group_id)
 
     def is_group_agent_enabled(self, group_id: int | str) -> bool:
+        """检查指定群组是否启用了自主回复模式。
+
+        Args:
+            group_id: 群组ID
+
+        Returns:
+            True if 该群已启用自主回复模式, False otherwise
+            默认返回False，除非使用.agent on命令明确启用
+
+        说明：
+            自主回复模式启用后，Bot会在以下情况下自动回复，无需@或命令前缀：
+            - JM推荐相关的高置信度意图（正则匹配_JM_AUTONOMOUS_RE）
+            - 公开求助问题的高置信度意图（正则匹配_HELP_QUESTION_RE）
+            - 其他明确的工具使用意图（如"画一张猫"、"P站推荐"等）
+        """
         return self.group_agent_modes.is_enabled(group_id)
 
     def record_jm_recommendations(self, group_id: int | str, recommendations: list[dict]) -> None:
@@ -528,39 +543,65 @@ class CommandHandler:
         user_id: int,
         **kwargs,
     ):
+        """处理群聊中的.agent命令，管理当前群的自主回复模式状态。
+
+        用法：
+            .agent on       - 启用当前群的自主回复模式
+            .agent off      - 关闭当前群的自主回复模式
+            .agent status   - 查询当前群的自主回复模式状态
+            .agent          - 默认等同于.agent status
+
+        权限：超级用户专属
+
+        自主回复模式效果：
+            启用后，Bot会对以下消息自动回复（无需@或使用命令前缀）：
+            - "今天推荐本子" / "来点jm" 等 → 触发.jm recommend
+            - "推荐栏第3个" → 触发.jm <id>（如果有历史推荐记录）
+            - "有人知道怎么..." 等求助问题 → ChatGPT直接回复
+            - "画一张猫" / "P站推荐" 等工具意图 → 自动路由到相应工具
+        """
         # 权限检查：仅超级用户可以切换群聊的自主回复模式
         if not self.bot_interfaces["test_if_super_user"](user_id):
             await self._send_group_text(ws, group_id, "权限不足，仅超级用户可切换 Agent 模式")
             return
 
-        # 提取命令参数（on/off/status）并转换为小写
+        # 提取命令参数（on/off/status）并转换为小写便于处理
         action = self.extract_command_content(message_content, CommandType.AGENT).strip().lower()
 
-        # 启用自主回复模式：支持多种表述方式
+        # 启用自主回复模式
+        # 支持多种表述方式（中英文、简写等）以提高用户体验
         if action in {"on", "enable", "enabled", "start", "开启", "启用", "打开"}:
+            # 调用GroupAgentModeStore.enable()，返回是否发生了状态变化
             changed = self.group_agent_modes.enable(group_id)
             if changed:
+                # 状态从禁用变为启用，给出确认反馈
                 await self._send_group_text(ws, group_id, "已启用本群自主回复模式")
             else:
+                # 群组已经处于启用状态，告知用户不需要重复启用
                 await self._send_group_text(ws, group_id, "本群自主回复模式已经启用")
             return
 
-        # 关闭自主回复模式：支持多种表述方式
+        # 关闭自主回复模式
+        # 支持多种表述方式以提高用户体验
         if action in {"off", "disable", "disabled", "stop", "关闭", "停用", "禁用"}:
+            # 调用GroupAgentModeStore.disable()，返回是否发生了状态变化
             changed = self.group_agent_modes.disable(group_id)
             if changed:
+                # 状态从启用变为禁用，给出确认反馈
                 await self._send_group_text(ws, group_id, "已关闭本群自主回复模式")
             else:
+                # 群组已经处于禁用状态，告知用户已是关闭状态
                 await self._send_group_text(ws, group_id, "本群自主回复模式本来就是关闭状态")
             return
 
         # 查询当前自主回复模式状态
+        # 当没有参数或参数为"status"时执行此分支
         if action in {"", "status", "状态"}:
             status = "启用" if self.group_agent_modes.is_enabled(group_id) else "关闭"
             await self._send_group_text(ws, group_id, f"本群自主回复模式：{status}")
             return
 
-        # 无效的命令参数，显示帮助信息
+        # 无效的命令参数，显示帮助信息提示正确用法
         await self._send_group_text(ws, group_id, "用法：.agent on / .agent off / .agent status")
 
     async def _handle_agent_private(self, ws, message_content: str, user_id: int, **kwargs):
