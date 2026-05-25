@@ -215,6 +215,8 @@ class MutedGroupOrchestratorTests(unittest.TestCase):
         install_plugin_stubs()
         cls.agent_orchestrator = importlib.import_module("agent_orchestrator")
         cls.command_handlers = importlib.import_module("command_handlers")
+        cls.command_handlers = importlib.import_module("command_handlers")
+        cls.command_handlers = importlib.import_module("command_handlers")
 
     def test_muted_group_ignores_non_unban_messages(self):
         class FakeCommandHandler:
@@ -473,6 +475,56 @@ class AutonomousGroupAgentDecisionTests(unittest.TestCase):
         self.assertEqual(decision.action, self.agent_orchestrator.AgentAction.TOOL)
         self.assertEqual(decision.command_type.value, "typst")
         self.assertEqual(decision.message_content, ".typ $x^2$")
+
+    def test_handle_group_message_routes_autonomous_tool_without_exception(self):
+        class FakeCommandHandler:
+            def __init__(self):
+                self.calls = []
+
+            def is_user_banned(self, _user_id):
+                return False
+
+            def is_group_bot_banned(self, _group_id):
+                return False
+
+            def get_command_type(self, _message_content):
+                return None
+
+            def is_group_agent_enabled(self, _group_id):
+                return True
+
+            def recent_jm_recommendation_at(self, _group_id, _index):
+                return None, 0
+
+            async def handle_command(self, _ws, message_type, command_type, message_content, **kwargs):
+                self.calls.append((message_type, command_type, message_content, kwargs))
+                return True
+
+        command_handler = FakeCommandHandler()
+        interfaces = {
+            "bot_qq": 42,
+            "test_if_super_user": lambda _user_id: False,
+            "encode_message_to_CQ": lambda _segments: asyncio.sleep(0, result="我想看JM1436338了，丛雨能帮我获取一下吗"),
+        }
+        orchestrator = self.agent_orchestrator.AgentOrchestrator(
+            interfaces,
+            command_handler,
+            persona_engine=None,
+            session_manager=types.SimpleNamespace(memory=None),
+            multimodal_processor=lambda _segments, content: asyncio.sleep(0, result=content),
+        )
+
+        result = asyncio.run(
+            orchestrator.handle_group_message(
+                None,
+                {"group_id": 100, "user_id": 2, "message": [{"type": "text", "data": {"text": "x"}}]},
+            )
+        )
+
+        self.assertTrue(result.handled)
+        self.assertEqual(command_handler.calls[0][0], self.command_handlers.MessageType.GROUP)
+        self.assertEqual(command_handler.calls[0][1].value, "jm")
+        self.assertEqual(command_handler.calls[0][2], ".jm 1436338")
 
 
 if __name__ == "__main__":

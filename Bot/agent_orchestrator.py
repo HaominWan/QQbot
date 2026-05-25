@@ -314,7 +314,7 @@ class AgentOrchestrator:
 
         # 第四优先级：尝试自动识别高置信度意图（JM推荐、求助问题、其他工具需求等）
         # 这是自主回复模式的核心逻辑，允许Bot在无@的情况下对特定意图自动回复
-        autonomous_decision = self._decide_autonomous_group(message_content)
+        autonomous_decision = self._decide_autonomous_group(group_id, message_content)
         if autonomous_decision:
             return autonomous_decision
 
