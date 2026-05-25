@@ -32,7 +32,11 @@ _WEB_CONTEXT_INSTRUCTION = (
     "requested work/entity, say that clearly instead of inventing names, studios, dates, "
     "plots, characters, or evaluations."
 )
-# Keep this date-scoped; second-level time here would break DeepSeek prefix caching.
+# 运行时上下文指令，包含当前日期和时区信息
+# 注意：仅保留日期级别的信息，不包含秒级时间信息
+# 原因：DeepSeek的前缀缓存要求cache key的内容必须稳定，如果每次请求都包含不同的时间戳，
+# 会导致缓存命中率严重下降。保留日期是为了满足日期敏感的查询需求（如"今天"、"最近"），
+# 但秒级时间变化太频繁，不适合用于长期缓存策略。
 _RUNTIME_CONTEXT_INSTRUCTION = (
     "Runtime context: current local date is {date}; "
     "local timezone is {timezone}. Treat this runtime context as authoritative over "

@@ -153,7 +153,15 @@ class GroupBotBanStore:
 
 
 class GroupAgentModeStore:
-    """Persists groups where autonomous group-agent replies are enabled."""
+    """管理群聊自主回复模式的启用/禁用状态，支持持久化存储。
+
+    自主回复模式（Agent Autonomous Mode）允许Bot在以下场景无需@或命令前缀即可自动回复：
+    - JM推荐相关的高置信度意图（如"今天推荐本子"）
+    - 求助问题的高置信度意图（如"有人知道怎么..."）
+    - 其他工具需求的明确表达（如"画一张猫"）
+
+    每个群的模式状态独立保存在JSON文件中，默认为关闭状态。
+    """
 
     def __init__(self, path: Path):
         self.path = path

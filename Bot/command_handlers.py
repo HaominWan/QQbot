@@ -52,6 +52,7 @@ class CommandHandler:
         self.group_agent_modes = GroupAgentModeStore(_BOT_DIR / "data" / "group_agent_modes.json")
         self.group_plugin_bans = GroupPluginBanStore(_BOT_DIR / "data" / "group_plugin_bans.json")
         self.user_bans = UserBanStore(_BOT_DIR / "data" / "banned_users.json")
+        self.recent_jm_recommendations: dict[int, list[dict]] = {}
         self.help_message = """========================
 .help              查看此帮助
 .help <插件名>     查看插件语法
@@ -130,7 +131,15 @@ class CommandHandler:
 关闭当前群自主回复模式，恢复默认的命令 / @ 才响应。
 
 .agent status
-查看当前群自主回复模式状态。""",
+查看当前群自主回复模式状态。
+
+当前自主路由：
+- JM：明确编号、推荐栏、第 N 个推荐项
+- Pixiv：PID、推荐、画师/关键词搜索
+- YGO：游戏王查卡
+- Draw：明确绘图请求
+- P5：P5 预告信/卡片
+- Markdown/Typst：明确要求渲染并用冒号给出内容""",
         }
         self._register_tools()
 
@@ -279,6 +288,20 @@ class CommandHandler:
 
     def is_group_agent_enabled(self, group_id: int | str) -> bool:
         return self.group_agent_modes.is_enabled(group_id)
+
+    def record_jm_recommendations(self, group_id: int | str, recommendations: list[dict]) -> None:
+        self.recent_jm_recommendations[int(group_id)] = list(recommendations or [])
+
+    def recent_jm_recommendation_at(self, group_id: int | str, index: int) -> tuple[Optional[str], int]:
+        recommendations = self.recent_jm_recommendations.get(int(group_id), [])
+        total = len(recommendations)
+        if index < 1 or index > total:
+            return None, total
+
+        album_id = recommendations[index - 1].get("id")
+        if album_id is None:
+            return None, total
+        return str(album_id).strip(), total
 
     def split_command_chain(self, message_content: str) -> list[str]:
         if "&&" not in message_content:
@@ -505,11 +528,15 @@ class CommandHandler:
         user_id: int,
         **kwargs,
     ):
+        # 权限检查：仅超级用户可以切换群聊的自主回复模式
         if not self.bot_interfaces["test_if_super_user"](user_id):
             await self._send_group_text(ws, group_id, "权限不足，仅超级用户可切换 Agent 模式")
             return
 
+        # 提取命令参数（on/off/status）并转换为小写
         action = self.extract_command_content(message_content, CommandType.AGENT).strip().lower()
+
+        # 启用自主回复模式：支持多种表述方式
         if action in {"on", "enable", "enabled", "start", "开启", "启用", "打开"}:
             changed = self.group_agent_modes.enable(group_id)
             if changed:
@@ -518,6 +545,7 @@ class CommandHandler:
                 await self._send_group_text(ws, group_id, "本群自主回复模式已经启用")
             return
 
+        # 关闭自主回复模式：支持多种表述方式
         if action in {"off", "disable", "disabled", "stop", "关闭", "停用", "禁用"}:
             changed = self.group_agent_modes.disable(group_id)
             if changed:
@@ -526,17 +554,21 @@ class CommandHandler:
                 await self._send_group_text(ws, group_id, "本群自主回复模式本来就是关闭状态")
             return
 
+        # 查询当前自主回复模式状态
         if action in {"", "status", "状态"}:
             status = "启用" if self.group_agent_modes.is_enabled(group_id) else "关闭"
             await self._send_group_text(ws, group_id, f"本群自主回复模式：{status}")
             return
 
+        # 无效的命令参数，显示帮助信息
         await self._send_group_text(ws, group_id, "用法：.agent on / .agent off / .agent status")
 
     async def _handle_agent_private(self, ws, message_content: str, user_id: int, **kwargs):
+        # 权限检查：仅超级用户可以切换自主回复模式
         if not self.bot_interfaces["test_if_super_user"](user_id):
             await self._send_private_text(ws, user_id, "权限不足，仅超级用户可切换 Agent 模式")
             return
+        # 自主回复模式只在群聊中生效，私聊不支持
         await self._send_private_text(ws, user_id, "Agent 模式只对群聊生效，请在目标群内使用 .agent on / .agent off")
 
     def _manageable_tool_names(self) -> str:
@@ -857,13 +889,14 @@ class CommandHandler:
                 tags_text = " / ".join(str(tag) for tag in tags[:8])
             if tags_text:
                 lines.append(f"   Tags：{tags_text}")
-        lines.append("发送 .jm <编号> 可下载对应 PDF")
+        lines.append("发送 .jm <编号> 可下载对应 PDF；Agent 模式下也可说「推荐栏第 N 个」")
         return "\n".join(lines)
 
     async def _send_jm_recommend_group(self, ws, group_id: int, command_content: str):
         limit = self._parse_jm_recommend_limit(command_content)
         await self._send_group_text(ws, group_id, "正在获取今日 JM 推荐栏...")
         recommendations = await jm2pdf.get_daily_recommendations(limit)
+        self.record_jm_recommendations(group_id, recommendations)
         await self._send_group_text(ws, group_id, self._format_jm_recommendations(recommendations))
 
     async def _send_jm_recommend_private(self, ws, user_id: int, command_content: str):

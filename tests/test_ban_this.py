@@ -313,13 +313,19 @@ class AutonomousGroupAgentDecisionTests(unittest.TestCase):
         install_plugin_stubs()
         cls.agent_orchestrator = importlib.import_module("agent_orchestrator")
 
-    def make_orchestrator(self, enabled: bool):
+    def make_orchestrator(self, enabled: bool, recommendations: list[dict] | None = None):
         class FakeCommandHandler:
             def get_command_type(self, _message_content):
                 return None
 
             def is_group_agent_enabled(self, _group_id):
                 return enabled
+
+            def recent_jm_recommendation_at(self, _group_id, index):
+                items = recommendations or []
+                if index < 1 or index > len(items):
+                    return None, len(items)
+                return str(items[index - 1]["id"]), len(items)
 
         interfaces = {
             "bot_qq": 42,
@@ -357,6 +363,116 @@ class AutonomousGroupAgentDecisionTests(unittest.TestCase):
         self.assertEqual(decision.action, self.agent_orchestrator.AgentAction.TOOL)
         self.assertEqual(decision.command_type.value, "jm")
         self.assertEqual(decision.message_content, ".jm recommend")
+
+    def test_autonomous_group_agent_maps_jm_recommendation_index_to_code(self):
+        orchestrator = self.make_orchestrator(
+            enabled=True,
+            recommendations=[{"id": "1439001"}, {"id": "1436338"}],
+        )
+
+        decision = orchestrator.decide_group(100, "我想看推荐栏的第2个", [])
+
+        self.assertEqual(decision.action, self.agent_orchestrator.AgentAction.TOOL)
+        self.assertEqual(decision.reason, "autonomous jm recommendation index")
+        self.assertEqual(decision.message_content, ".jm 1436338")
+
+    def test_autonomous_group_agent_discusses_out_of_range_jm_index(self):
+        orchestrator = self.make_orchestrator(enabled=True, recommendations=[{"id": "1439001"}])
+
+        decision = orchestrator.decide_group(100, "我想看推荐栏第六个", [])
+
+        self.assertEqual(decision.action, self.agent_orchestrator.AgentAction.CHAT)
+        self.assertEqual(decision.reason, "autonomous jm recommendation index out of range")
+        self.assertIn("当前只记录了 1 个推荐项", decision.message_content)
+
+    def test_autonomous_group_agent_discusses_jm_index_without_history(self):
+        orchestrator = self.make_orchestrator(enabled=True)
+
+        decision = orchestrator.decide_group(100, "我想看推荐栏第1个", [])
+
+        self.assertEqual(decision.action, self.agent_orchestrator.AgentAction.CHAT)
+        self.assertEqual(decision.reason, "autonomous jm recommendation index without history")
+        self.assertIn("还没有可用的推荐栏记录", decision.message_content)
+
+    def test_autonomous_group_agent_prefers_explicit_jm_code_over_recommend(self):
+        orchestrator = self.make_orchestrator(enabled=True)
+
+        decision = orchestrator.decide_group(100, "那我想看JM1436338了，丛雨能帮我获取一下吗", [])
+
+        self.assertEqual(decision.action, self.agent_orchestrator.AgentAction.TOOL)
+        self.assertEqual(decision.reason, "autonomous jm code request")
+        self.assertEqual(decision.command_type.value, "jm")
+        self.assertEqual(decision.message_content, ".jm 1436338")
+
+    def test_autonomous_group_agent_extracts_number_before_jm_keyword(self):
+        orchestrator = self.make_orchestrator(enabled=True)
+
+        decision = orchestrator.decide_group(100, "想看1436338这个本子", [])
+
+        self.assertEqual(decision.action, self.agent_orchestrator.AgentAction.TOOL)
+        self.assertEqual(decision.message_content, ".jm 1436338")
+
+    def test_autonomous_group_agent_routes_pixiv_recommendation(self):
+        orchestrator = self.make_orchestrator(enabled=True)
+
+        decision = orchestrator.decide_group(100, "来点p站推荐", [])
+
+        self.assertEqual(decision.action, self.agent_orchestrator.AgentAction.TOOL)
+        self.assertEqual(decision.command_type.value, "pixiv")
+        self.assertEqual(decision.message_content, ".pixiv recommend")
+
+    def test_autonomous_group_agent_routes_pixiv_pid(self):
+        orchestrator = self.make_orchestrator(enabled=True)
+
+        decision = orchestrator.decide_group(100, "帮我看一下pixiv 12345678", [])
+
+        self.assertEqual(decision.action, self.agent_orchestrator.AgentAction.TOOL)
+        self.assertEqual(decision.message_content, ".pixiv 12345678")
+
+    def test_autonomous_group_agent_routes_ygo_lookup(self):
+        orchestrator = self.make_orchestrator(enabled=True)
+
+        decision = orchestrator.decide_group(100, "游戏王查卡 青眼白龙", [])
+
+        self.assertEqual(decision.action, self.agent_orchestrator.AgentAction.TOOL)
+        self.assertEqual(decision.command_type.value, "YGO")
+        self.assertEqual(decision.message_content, ".YGO 青眼白龙")
+
+    def test_autonomous_group_agent_routes_drawing_request(self):
+        orchestrator = self.make_orchestrator(enabled=True)
+
+        decision = orchestrator.decide_group(100, "帮我画 一只猫坐在键盘上", [])
+
+        self.assertEqual(decision.action, self.agent_orchestrator.AgentAction.TOOL)
+        self.assertEqual(decision.command_type.value, "draw")
+        self.assertEqual(decision.message_content, ".draw 一只猫坐在键盘上")
+
+    def test_autonomous_group_agent_routes_p5_card_request(self):
+        orchestrator = self.make_orchestrator(enabled=True)
+
+        decision = orchestrator.decide_group(100, "生成P5预告信 群友今晚必早睡", [])
+
+        self.assertEqual(decision.action, self.agent_orchestrator.AgentAction.TOOL)
+        self.assertEqual(decision.command_type.value, "P5")
+        self.assertEqual(decision.message_content, ".P5 群友今晚必早睡")
+
+    def test_autonomous_group_agent_routes_markdown_render_request(self):
+        orchestrator = self.make_orchestrator(enabled=True)
+
+        decision = orchestrator.decide_group(100, "渲染markdown: # 标题", [])
+
+        self.assertEqual(decision.action, self.agent_orchestrator.AgentAction.TOOL)
+        self.assertEqual(decision.command_type.value, "markdown")
+        self.assertEqual(decision.message_content, ".md # 标题")
+
+    def test_autonomous_group_agent_routes_typst_render_request(self):
+        orchestrator = self.make_orchestrator(enabled=True)
+
+        decision = orchestrator.decide_group(100, "渲染typst: $x^2$", [])
+
+        self.assertEqual(decision.action, self.agent_orchestrator.AgentAction.TOOL)
+        self.assertEqual(decision.command_type.value, "typst")
+        self.assertEqual(decision.message_content, ".typ $x^2$")
 
 
 if __name__ == "__main__":
