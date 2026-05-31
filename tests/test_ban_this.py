@@ -518,6 +518,71 @@ class AutonomousGroupAgentDecisionTests(unittest.TestCase):
         self.assertEqual(decision.command_type.value, "P5")
         self.assertEqual(decision.message_content, ".P5 群友今晚必早睡")
 
+    def test_autonomous_group_agent_ignores_forwarded_media_metadata(self):
+        orchestrator = self.make_orchestrator(enabled=True)
+
+        decision = orchestrator.decide_group(
+            100,
+            "[CQ:image,file=cache]p5-card.png,url=https://img.example/pixiv推荐.jpg]"
+            "[CQ:video,file=clip]p5-preview.mp4]",
+            [
+                {
+                    "type": "image",
+                    "data": {
+                        "file": "cache]p5-card.png",
+                        "url": "https://img.example/pixiv推荐.jpg",
+                    },
+                },
+                {
+                    "type": "video",
+                    "data": {
+                        "file": "clip]p5-preview.mp4",
+                        "url": "https://video.example/pixiv推荐.mp4",
+                    },
+                },
+            ],
+        )
+
+        self.assertEqual(decision.action, self.agent_orchestrator.AgentAction.IGNORE)
+        self.assertEqual(decision.reason, "group message did not mention bot")
+
+    def test_autonomous_group_agent_ignores_nested_forwarded_text(self):
+        orchestrator = self.make_orchestrator(enabled=True)
+
+        decision = orchestrator.decide_group(
+            100,
+            "[CQ:node,name=alice,content=[{'type': 'text', 'data': {'text': '给我来点pixiv'}}]]",
+            [
+                {
+                    "type": "node",
+                    "data": {
+                        "name": "alice",
+                        "uin": "123",
+                        "content": [{"type": "text", "data": {"text": "给我来点pixiv"}}],
+                    },
+                }
+            ],
+        )
+
+        self.assertEqual(decision.action, self.agent_orchestrator.AgentAction.IGNORE)
+        self.assertEqual(decision.reason, "group message did not mention bot")
+
+    def test_autonomous_group_agent_routes_media_caption_text(self):
+        orchestrator = self.make_orchestrator(enabled=True)
+
+        decision = orchestrator.decide_group(
+            100,
+            "[CQ:image,file=cache.jpg]给我来点pixiv",
+            [
+                {"type": "image", "data": {"file": "cache.jpg"}},
+                {"type": "text", "data": {"text": "给我来点pixiv"}},
+            ],
+        )
+
+        self.assertEqual(decision.action, self.agent_orchestrator.AgentAction.TOOL)
+        self.assertEqual(decision.command_type.value, "pixiv")
+        self.assertEqual(decision.message_content, ".pixiv recommend")
+
     def test_autonomous_group_agent_routes_markdown_render_request(self):
         orchestrator = self.make_orchestrator(enabled=True)
 
@@ -577,7 +642,11 @@ class AutonomousGroupAgentDecisionTests(unittest.TestCase):
         result = asyncio.run(
             orchestrator.handle_group_message(
                 None,
-                {"group_id": 100, "user_id": 2, "message": [{"type": "text", "data": {"text": "x"}}]},
+                {
+                    "group_id": 100,
+                    "user_id": 2,
+                    "message": [{"type": "text", "data": {"text": "我想看JM1436338了，丛雨能帮我获取一下吗"}}],
+                },
             )
         )
 
@@ -627,7 +696,11 @@ class AutonomousGroupAgentDecisionTests(unittest.TestCase):
         result = asyncio.run(
             orchestrator.handle_group_message(
                 None,
-                {"group_id": 100, "user_id": 2, "message": [{"type": "text", "data": {"text": "x"}}]},
+                {
+                    "group_id": 100,
+                    "user_id": 2,
+                    "message": [{"type": "text", "data": {"text": "给我来点pixiv"}}],
+                },
             )
         )
 
@@ -691,7 +764,11 @@ class AutonomousGroupAgentDecisionTests(unittest.TestCase):
         result = asyncio.run(
             orchestrator.handle_group_message(
                 None,
-                {"group_id": 100, "user_id": 2, "message": [{"type": "text", "data": {"text": "x"}}]},
+                {
+                    "group_id": 100,
+                    "user_id": 2,
+                    "message": [{"type": "text", "data": {"text": "模型蒸馏是什么？"}}],
+                },
             )
         )
 

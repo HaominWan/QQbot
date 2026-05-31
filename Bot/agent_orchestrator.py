@@ -116,6 +116,26 @@ def _looks_like_public_help_question(text: str) -> bool:
     return bool(_HELP_QUESTION_RE.search(compact) or _DIRECT_HELP_QUESTION_RE.search(compact))
 
 
+def _extract_autonomous_route_text(message_content: str, segments: list | None) -> str:
+    """Return only user-authored top-level text for autonomous intent matching.
+
+    Non-text segments can carry forwarded-message payloads, file names, URLs, or
+    JSON previews. Those fields often contain route keywords such as pixiv or p5,
+    but they are metadata rather than a user request.
+    """
+    if isinstance(segments, list) and segments:
+        text_parts: list[str] = []
+        for part in segments:
+            if not isinstance(part, dict) or part.get("type") != "text":
+                continue
+            text = part.get("data", {}).get("text", "")
+            if text:
+                text_parts.append(str(text))
+        return "".join(text_parts).strip()
+
+    return _CQ_RE.sub("", message_content or "").strip()
+
+
 class AgentAction(Enum):
     IGNORE = "ignore"
     TOOL = "tool"
@@ -369,16 +389,21 @@ class AgentOrchestrator:
 
         # 第四优先级：尝试自动识别高置信度意图（JM推荐、求助问题、其他工具需求等）
         # 这是自主回复模式的核心逻辑，允许Bot在无@的情况下对特定意图自动回复
-        autonomous_decision = self._decide_autonomous_group(group_id, message_content)
+        autonomous_decision = self._decide_autonomous_group(group_id, message_content, segments)
         if autonomous_decision:
             return autonomous_decision
 
         # 默认：忽略该消息
         return AgentDecision(AgentAction.IGNORE, "group message did not mention bot")
 
-    def _decide_autonomous_group(self, group_id: int, message_content: str) -> Optional[AgentDecision]:
-        # 移除CQ码（如图片、@、链接等），只保留纯文本用于意图识别
-        text = _CQ_RE.sub("", message_content or "").strip()
+    def _decide_autonomous_group(
+        self,
+        group_id: int,
+        message_content: str,
+        segments: list | None = None,
+    ) -> Optional[AgentDecision]:
+        # 只保留用户顶层文本用于意图识别，避免转发/媒体段的元数据误触发工具路由
+        text = _extract_autonomous_route_text(message_content, segments)
         if not text:
             return None
 
