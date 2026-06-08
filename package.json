@@ -1,6 +1,7 @@
 {
   "name": "qqbot",
   "private": true,
+  "license": "UNLICENSED",
   "dependencies": {
     "katex": "^0.16.45",
     "markdown-it": "^14.1.0",
