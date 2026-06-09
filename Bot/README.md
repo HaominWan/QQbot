@@ -280,6 +280,6 @@ QQBot/
 
 ## License
 
-Proprietary. All rights reserved. See [LICENSE](../LICENSE).
+GPL-3.0-only. See [LICENSE](../LICENSE).
 
-未经版权所有者事先书面许可，禁止使用、复制、修改、分发、再许可、部署或基于本项目创建衍生作品。第三方依赖遵循其各自许可证。
+本项目以 GNU General Public License v3.0 授权。第三方依赖遵循其各自许可证。
