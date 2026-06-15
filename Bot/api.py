@@ -395,24 +395,34 @@ async def _call_deepseek_api(chat_history):
 
     _timeout = httpx.Timeout(connect=10.0, read=120.0, write=10.0, pool=10.0)
 
+    async def _try_request(proxy: str | None) -> str:
+        http_client = httpx.AsyncClient(proxy=proxy, timeout=_timeout) if proxy else httpx.AsyncClient(timeout=_timeout)
+        client = AsyncOpenAI(
+            api_key=DEEPSEEK_API_KEY,
+            base_url=DEEPSEEK_BASE_URL,
+            http_client=http_client,
+            timeout=_timeout.read,
+        )
+        try:
+            return await _consume_response(client)
+        finally:
+            await client.close()
+            if not http_client.is_closed:
+                await http_client.aclose()
+
     for attempt in range(_MAX_RETRIES):
         try:
-            http_client = httpx.AsyncClient(proxy=PROXY_URL, timeout=_timeout) if PROXY_URL else httpx.AsyncClient(timeout=_timeout)
-            client = AsyncOpenAI(
-                api_key=DEEPSEEK_API_KEY,
-                base_url=DEEPSEEK_BASE_URL,
-                http_client=http_client,
-                timeout=_timeout.read,
-            )
-            try:
-                return await _consume_response(client)
-            finally:
-                await client.close()
-                if not http_client.is_closed:
-                    await http_client.aclose()
-
+            return await _try_request(PROXY_URL)
         except Exception as e:
-            print(f"Error calling DeepSeek API (attempt {attempt + 1}/{_MAX_RETRIES}): {e}")
+            is_conn_err = "connection" in str(e).lower() or "connect" in type(e).__name__.lower()
+            if PROXY_URL and is_conn_err:
+                print(f"[DeepSeek] Proxy unreachable, retrying direct: {e}")
+                try:
+                    return await _try_request(None)
+                except Exception as e2:
+                    print(f"Error calling DeepSeek API (attempt {attempt + 1}/{_MAX_RETRIES}): {e2}")
+            else:
+                print(f"Error calling DeepSeek API (attempt {attempt + 1}/{_MAX_RETRIES}): {e}")
             if attempt < _MAX_RETRIES - 1:
                 await asyncio.sleep(_RETRY_DELAY * (attempt + 1))
             else:
