@@ -393,19 +393,22 @@ async def _call_deepseek_api(chat_history):
                 full_response += chunk.choices[0].delta.content
         return full_response
 
+    _timeout = httpx.Timeout(connect=10.0, read=120.0, write=10.0, pool=10.0)
+
     for attempt in range(_MAX_RETRIES):
         try:
-            http_client = httpx.AsyncClient(proxy=PROXY_URL) if PROXY_URL else None
+            http_client = httpx.AsyncClient(proxy=PROXY_URL, timeout=_timeout) if PROXY_URL else httpx.AsyncClient(timeout=_timeout)
             client = AsyncOpenAI(
                 api_key=DEEPSEEK_API_KEY,
                 base_url=DEEPSEEK_BASE_URL,
                 http_client=http_client,
+                timeout=_timeout.read,
             )
             try:
                 return await _consume_response(client)
             finally:
                 await client.close()
-                if http_client is not None and not http_client.is_closed:
+                if not http_client.is_closed:
                     await http_client.aclose()
 
         except Exception as e:
