@@ -15,8 +15,9 @@ if str(BOT_DIR) not in sys.path:
 def install_plugin_stubs():
     plugins = types.ModuleType("plugins")
     plugins.__path__ = []
-    for name in ("P5_card", "YGO_find_card", "drawing", "jm2pdf", "markdown", "pixiv", "typst_renderer"):
+    for name in ("P5_card", "YGO_find_card", "ciallo", "drawing", "jm2pdf", "markdown", "pixiv", "typst_renderer"):
         setattr(plugins, name, types.SimpleNamespace())
+    plugins.ciallo.get_message = lambda: "Ciallo message"
     sys.modules["plugins"] = plugins
     markdown_module = types.ModuleType("plugins.markdown")
     markdown_module.markdown_to_image = lambda _text: ""
@@ -156,6 +157,24 @@ class BanThisCommandTests(unittest.TestCase):
             self.assertTrue(handled)
             self.assertEqual(observed, [(group_id, "recommend 3", False)])
             self.assertTrue(handler.group_plugin_bans.is_banned(group_id, "jm"))
+
+    def test_ciallo_command_sends_map_links(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            handler, sent = self.make_handler(Path(tmp))
+
+            handled = asyncio.run(
+                handler.handle_command(
+                    None,
+                    self.command_handlers.MessageType.GROUP,
+                    self.command_handlers.CommandType.CIALLO,
+                    ".ciallo",
+                    group_id=100,
+                    user_id=2,
+                )
+            )
+
+            self.assertTrue(handled)
+            self.assertEqual(sent[-1], (100, "Ciallo message"))
 
     def test_agent_mode_defaults_off_and_super_user_can_toggle_it(self):
         with tempfile.TemporaryDirectory() as tmp:

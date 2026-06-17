@@ -212,6 +212,7 @@ python bot.py
 | `.pixiv <PID/tag/关键词> [-n 1-3]` | Pixiv 搜图，默认按角色/tag/标题搜索 | 所有人 |
 | `.pixiv drawer:<画师名> [-n 1-3]` | Pixiv 按画师搜索作品 | 所有人 |
 | `.pixiv recommend [-n 1-3]` | Pixiv 每日推荐，随机返回排行榜高质量图 | 所有人 |
+| `.ciallo` | NPUCraft 地图与数据面板链接 | 所有人 |
 
 ### Agent 自主路由
 

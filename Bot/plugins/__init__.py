@@ -5,3 +5,4 @@ from .gemini import *
 from .YGO_find_card import *
 from .P5_card import *
 from .jm2pdf import *
+from .ciallo import *

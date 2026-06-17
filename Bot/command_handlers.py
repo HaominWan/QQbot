@@ -8,7 +8,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Optional
 
-from plugins import P5_card, YGO_find_card, drawing, jm2pdf, markdown, pixiv, typst_renderer
+from plugins import P5_card, YGO_find_card, ciallo, drawing, jm2pdf, markdown, pixiv, typst_renderer
 from plugin_state import GroupAgentModeStore, GroupBotBanStore, GroupPluginBanStore, UserBanStore
 from tool_router import Tool, ToolRouter, ToolScope
 
@@ -30,6 +30,7 @@ class CommandType(Enum):
     P5 = "P5"
     JM = "jm"
     PIXIV = "pixiv"
+    CIALLO = "ciallo"
     BAN = "ban"
     UNBAN = "unban"
     AGENT = "agent"
@@ -69,6 +70,7 @@ class CommandHandler:
 .jm                下载 JM 并生成 PDF
 .jm recommend      今日 JM 推荐
 .pixiv             Pixiv 搜图
+.ciallo            NPUCraft 地图链接
 ========================
 ★ 超级用户专属指令"""
         self.plugin_help_messages = {
@@ -140,6 +142,10 @@ class CommandHandler:
 - Draw：明确绘图请求
 - P5：P5 预告信/卡片
 - Markdown/Typst：明确要求渲染并用冒号给出内容""",
+            "ciallo": """Ciallo 插件语法
+
+.ciallo
+发送 NPUCraft 主服、工业服、资源服和狐务器地图/数据面板链接。""",
         }
         self._register_tools()
 
@@ -269,6 +275,15 @@ class CommandHandler:
                     group_handler=self._handle_pixiv_group,
                     private_handler=self._handle_pixiv_private,
                     description="Pixiv 搜图",
+                    controllable=True,
+                ),
+                Tool(
+                    name="ciallo",
+                    command_type=CommandType.CIALLO,
+                    prefixes=[".ciallo"],
+                    group_handler=self._handle_ciallo_group,
+                    private_handler=self._handle_ciallo_private,
+                    description="NPUCraft 地图链接",
                     controllable=True,
                 ),
             ]
@@ -996,6 +1011,12 @@ class CommandHandler:
         command_content = self.extract_command_content(message_content, CommandType.PIXIV)
         pixiv_result = await pixiv.handle_pixiv_message(command_content)
         await self.bot_interfaces["send_private_message"](ws, user_id, pixiv_result)
+
+    async def _handle_ciallo_group(self, ws, message_content: str, group_id: int, **kwargs):
+        await self._send_group_text(ws, group_id, ciallo.get_message())
+
+    async def _handle_ciallo_private(self, ws, message_content: str, user_id: int, **kwargs):
+        await self._send_private_text(ws, user_id, ciallo.get_message())
 
     def _cleanup_jm_tmp(self, jm_pdf: str, command_content: str):
         if jm_pdf and os.path.exists(jm_pdf):
