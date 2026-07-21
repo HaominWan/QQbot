@@ -705,7 +705,7 @@ class CommandHandler:
             await self._send_group_text(ws, group_id, "权限不足，仅超级用户可管理测试群")
             return
 
-        response = self._run_testgroup_command(message_content, default_group_id=group_id)
+        response = await self._run_testgroup_command(ws, message_content, default_group_id=group_id)
         await self._send_group_text(ws, group_id, response)
 
     async def _handle_testgroup_private(self, ws, message_content: str, user_id: int, **kwargs):
@@ -713,10 +713,10 @@ class CommandHandler:
             await self._send_private_text(ws, user_id, "权限不足，仅超级用户可管理测试群")
             return
 
-        response = self._run_testgroup_command(message_content, default_group_id=None)
+        response = await self._run_testgroup_command(ws, message_content, default_group_id=None)
         await self._send_private_text(ws, user_id, response)
 
-    def _run_testgroup_command(self, message_content: str, default_group_id: int | None) -> str:
+    async def _run_testgroup_command(self, ws, message_content: str, default_group_id: int | None) -> str:
         raw_content = self.extract_command_content(message_content, CommandType.TESTGROUP)
         parts = raw_content.strip().split()
         action = parts[0].lower() if parts else "ls"
@@ -725,7 +725,11 @@ class CommandHandler:
             groups = self.test_groups.list()
             if not groups:
                 return "当前没有测试群。使用 .testgroup add <群号> 添加。"
-            return "当前测试群：\n" + "\n".join(f"- {group_id}" for group_id in groups)
+            group_names = await self._test_group_name_map(ws)
+            return "当前测试群：\n" + "\n".join(
+                f"- {self._format_test_group_entry(group_id, group_names)}"
+                for group_id in groups
+            )
 
         if action in {"add", "ad", "加入", "添加"}:
             target = self._testgroup_target(parts, default_group_id)
@@ -734,9 +738,11 @@ class CommandHandler:
             if not target.isdigit():
                 return f"群号必须是数字：{target}"
             changed = self.test_groups.add(target)
+            group_names = await self._test_group_name_map(ws)
+            target_text = self._format_test_group_entry(target, group_names)
             if changed:
-                return f"已加入测试群：{target}"
-            return f"群 {target} 已经在测试组中"
+                return f"已加入测试群：{target_text}"
+            return f"群 {target_text} 已经在测试组中"
 
         if action in {"rm", "remove", "del", "delete", "移出", "删除"}:
             target = self._testgroup_target(parts, default_group_id)
@@ -744,10 +750,12 @@ class CommandHandler:
                 return "请提供群号：.testgroup rm <群号>"
             if not target.isdigit():
                 return f"群号必须是数字：{target}"
+            group_names = await self._test_group_name_map(ws)
+            target_text = self._format_test_group_entry(target, group_names)
             changed = self.test_groups.remove(target)
             if changed:
-                return f"已移出测试群：{target}"
-            return f"群 {target} 本来就不在测试组中"
+                return f"已移出测试群：{target_text}"
+            return f"群 {target_text} 本来就不在测试组中"
 
         return "用法：.testgroup ls | .testgroup add <群号> | .testgroup rm <群号>"
 
@@ -758,6 +766,35 @@ class CommandHandler:
         if default_group_id is None:
             return None
         return str(default_group_id)
+
+    async def _test_group_name_map(self, ws) -> dict[str, str]:
+        get_group_list = self.bot_interfaces.get("get_group_list")
+        if get_group_list is None:
+            return {}
+
+        try:
+            group_list = await get_group_list(ws)
+        except Exception as exc:
+            print(f"[Command] Failed to fetch group list: {exc}")
+            return {}
+
+        names: dict[str, str] = {}
+        for group in group_list or []:
+            if not isinstance(group, dict):
+                continue
+            group_id = group.get("group_id")
+            if group_id is None:
+                continue
+            group_name = group.get("group_name") or group.get("group_remark") or group.get("name")
+            if group_name:
+                names[str(group_id)] = str(group_name)
+        return names
+
+    @staticmethod
+    def _format_test_group_entry(group_id: int | str, group_names: dict[str, str]) -> str:
+        group_key = str(group_id).strip()
+        group_name = group_names.get(group_key, "群名未获取")
+        return f"{group_key} {group_name}"
 
     async def _handle_plugin_group(
         self,

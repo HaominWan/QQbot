@@ -113,6 +113,15 @@ async def get_stranger_info(ws, user_id):
         return response["data"]
     return None
 
+async def get_group_list(ws):
+    response = await _send_onebot_action(ws, "get_group_list", {})
+    if response is None:
+        return []
+    data = response.get("data")
+    if isinstance(data, list):
+        return data
+    return []
+
 async def send_group_message(ws, group_id, message, auto_escape=False):
 # async def send_group_message(ws_url: str, group_id: str, message, auto_escape: bool =False):
     print("[NapCat]Sending message:", message)
@@ -345,6 +354,7 @@ def set_interfaces():
         "send_private_message": send_private_message,
         "withdraw_group_message": withdraw_group_message,
         "get_stranger_info": get_stranger_info,
+        "get_group_list": get_group_list,
         "encode_message_to_CQ": encode_message_to_CQ,
         "encode_message_to_CQ_without_At_self_and_Image": encode_message_to_CQ_without_At_self_and_Image,
         "decode_CQ_to_message": decode_CQ_to_message,

@@ -51,6 +51,12 @@ class BanThisCommandTests(unittest.TestCase):
         async def send_private(_ws, user_id, message):
             pass
 
+        async def get_group_list(_ws):
+            return [
+                {"group_id": 100, "group_name": "测试群一"},
+                {"group_id": 200, "group_name": "测试群二"},
+            ]
+
         handler = self.command_handlers.CommandHandler(
             {
                 "decode_CQ_to_message": decode,
@@ -58,6 +64,7 @@ class BanThisCommandTests(unittest.TestCase):
                 "send_private_message": send_private,
                 "test_if_super_user": lambda user_id: int(user_id) == 1,
                 "test_group_store": test_group_store,
+                "get_group_list": get_group_list,
             },
             {},
         )
@@ -243,7 +250,7 @@ class BanThisCommandTests(unittest.TestCase):
                     user_id=1,
                 )
             )
-            self.assertIn("100", sent[-1][1])
+            self.assertIn("100 测试群一", sent[-1][1])
 
             asyncio.run(
                 handler.handle_command(
@@ -256,7 +263,7 @@ class BanThisCommandTests(unittest.TestCase):
                 )
             )
             self.assertTrue(handler.is_test_group_allowed(200))
-            self.assertIn("已加入测试群", sent[-1][1])
+            self.assertIn("已加入测试群：200 测试群二", sent[-1][1])
 
             asyncio.run(
                 handler.handle_command(
@@ -269,7 +276,7 @@ class BanThisCommandTests(unittest.TestCase):
                 )
             )
             self.assertFalse(handler.is_test_group_allowed(100))
-            self.assertIn("已移出测试群", sent[-1][1])
+            self.assertIn("已移出测试群：100 测试群一", sent[-1][1])
 
     def test_testgroup_command_rejects_non_super_user(self):
         with tempfile.TemporaryDirectory() as tmp:
