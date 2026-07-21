@@ -152,6 +152,79 @@ class GroupBotBanStore:
         return True
 
 
+class TestGroupStore:
+    """Persists groups that are allowed to interact with the bot."""
+
+    def __init__(self, path: Path, default_groups: list[int | str] | None = None):
+        self.path = path
+        self.default_groups = sorted(
+            {
+                self._group_key(group_id)
+                for group_id in (default_groups or [])
+                if self._group_key(group_id)
+            }
+        )
+
+    @staticmethod
+    def _group_key(group_id: int | str) -> str:
+        return str(group_id).strip()
+
+    def _load(self) -> list[str]:
+        if not self.path.exists():
+            return list(self.default_groups)
+
+        try:
+            with self.path.open("r", encoding="utf-8") as f:
+                data: Any = json.load(f)
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"[PluginState] Failed to read {self.path}: {exc}")
+            return list(self.default_groups)
+
+        if isinstance(data, dict):
+            groups = data.get("groups", [])
+        else:
+            groups = data
+
+        if not isinstance(groups, list):
+            return list(self.default_groups)
+
+        return sorted({self._group_key(group) for group in groups if self._group_key(group)})
+
+    def _save(self, groups: list[str]) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = self.path.with_suffix(f"{self.path.suffix}.tmp")
+        with tmp_path.open("w", encoding="utf-8") as f:
+            json.dump({"groups": sorted(groups)}, f, ensure_ascii=False, indent=2)
+            f.write("\n")
+        os.replace(tmp_path, self.path)
+
+    def list(self) -> list[str]:
+        return self._load()
+
+    def contains(self, group_id: int | str) -> bool:
+        return self._group_key(group_id) in self._load()
+
+    def add(self, group_id: int | str) -> bool:
+        group_key = self._group_key(group_id)
+        groups = set(self._load())
+        if not group_key or group_key in groups:
+            return False
+
+        groups.add(group_key)
+        self._save(sorted(groups))
+        return True
+
+    def remove(self, group_id: int | str) -> bool:
+        group_key = self._group_key(group_id)
+        groups = set(self._load())
+        if group_key not in groups:
+            return False
+
+        groups.remove(group_key)
+        self._save(sorted(groups))
+        return True
+
+
 class GroupAgentModeStore:
     """管理群聊自主回复模式的启用/禁用状态，支持持久化存储。
 

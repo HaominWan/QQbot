@@ -8,6 +8,7 @@ import time
 import traceback
 import os
 import importlib
+import sys
 import requests
 import errno
 
@@ -353,6 +354,7 @@ def set_interfaces():
         "proxy_url": proxy_url,
         "upload_group_file": upload_group_file,
         "upload_private_file": upload_private_file,
+        "reload_handlers": lambda: hot_reload("handlers"),
     }
 
 
@@ -360,11 +362,23 @@ handlers = None
 async def hot_reload(handler_file):
     set_interfaces()
     global handlers
-    if hasattr(handler_file, "handler_release"): await handlers.handler_release()
+    old_handlers = handlers
+    if old_handlers is not None and hasattr(old_handlers, "handler_release"):
+        await old_handlers.handler_release()
+
+    module_name = handler_file if isinstance(handler_file, str) else handler_file.__name__
     try:
-        handlers = importlib.reload(handler_file)
-    except:
-        handlers = importlib.import_module(handler_file)
+        if isinstance(handler_file, str):
+            if module_name in sys.modules:
+                handlers = importlib.reload(sys.modules[module_name])
+            else:
+                handlers = importlib.import_module(module_name)
+        else:
+            handlers = importlib.reload(handler_file)
+    except Exception:
+        handlers = old_handlers
+        traceback.print_exc()
+        raise
     if handlers == None: return
     if hasattr(handlers, "handler_init"): await handlers.handler_init(interfaces)
     return handlers

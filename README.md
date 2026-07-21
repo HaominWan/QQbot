@@ -137,7 +137,7 @@ npm install markdown-it markdown-it-texmath katex puppeteer
 | `pixiv_refresh_token` | Pixiv 登录 refresh token，用于 Pixiv 搜图/推荐 | Pixiv 功能必填 |
 | `prodia` | 已弃用 | — |
 | `super_users` | 主人 QQ 号列表，拥有管理指令权限 | 必填 |
-| `test_groups` | 允许 Bot 响应的群号列表 | 必填 |
+| `test_groups` | 初始允许 Bot 响应的群号列表；运行后可用 `.testgroup` 动态管理 | 必填 |
 | `proxy_url` | HTTP 代理 | 按需填写 |
 | `memory_settings.window_size` | 内存中保留的最近消息数 | 默认 30 |
 | `memory_settings.search_results` | 每次从向量 DB 检索的历史条数 | 默认 3 |
@@ -200,6 +200,8 @@ python bot.py
 | `.stop` | 强制停止 Bot 与 NapCat | ★ |
 | `.clean` | 清空当前群的向量记忆数据库和当前对话上下文 | ★ |
 | `.agent on/off/status` | 切换当前群自主回复模式，默认关闭 | ★ |
+| `.testgroup ls/add/rm` | 列出、加入、移出允许 Bot 响应的测试群；别名 `.tg` | ★ |
+| `.plugin reload [插件名\|all]` | 热重载 `Bot/plugins` 下的插件模块；别名 `.plg` | ★ |
 | `.ban <插件名>` | 在当前群禁用可管理插件，例如 `.ban jm` | ★ |
 | `.unban <插件名>` | 在当前群重新启用插件，例如 `.unban jm` | ★ |
 | `.ban user:<QQ号>` | 禁止 Bot 回复指定用户（群聊和私聊均生效） | ★ |

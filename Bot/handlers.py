@@ -15,6 +15,8 @@ from config import (
 )
 from framework import BotContext, EventRouter, MessageEvent
 from persona_engine import PersonaEngine
+from pathlib import Path
+from plugin_state import TestGroupStore
 from plugins import analyze_video
 from plugins.vision import describe_image, fetch_image
 from session_manager import SessionManager
@@ -28,7 +30,9 @@ event_router = None
 agent_orchestrator = None
 user_sessions = {}
 
-test_group = TEST_GROUPS
+_BOT_DIR = Path(__file__).resolve().parent
+test_group_store = TestGroupStore(_BOT_DIR / "data" / "test_groups.json", TEST_GROUPS)
+TEST_GROUP_COMMAND_PREFIXES = (".testgroup", ".tg")
 
 
 async def handle_image_message(image_urls, message_content):
@@ -89,10 +93,13 @@ async def process_multimodal_content(message_segments, message_content):
 
 
 async def handler_init(interfaces):
-    global bot_interfaces, command_handler, user_sessions
+    global bot_interfaces, command_handler, user_sessions, test_group_store
     global persona_engine, session_manager, event_router, agent_orchestrator
 
     bot_interfaces = interfaces
+    test_group_store = TestGroupStore(_BOT_DIR / "data" / "test_groups.json", TEST_GROUPS)
+    bot_interfaces["test_group_store"] = test_group_store
+    bot_interfaces["is_test_group_allowed"] = test_group_store.contains
     persona_engine = PersonaEngine(
         bot_interfaces["bot_qq"],
         bot_interfaces["test_if_super_user"],
@@ -150,7 +157,10 @@ def create_event_router():
         await handle_private_message(ctx.ws, ctx.event.raw)
 
     @router.message(
-        lambda ctx: ctx.event.is_group and ctx.event.group_id in test_group,
+        lambda ctx: ctx.event.is_group and (
+            test_group_store.contains(ctx.event.group_id)
+            or _is_test_group_admin_command(ctx)
+        ),
         name="allowed_group_message",
         priority=10,
     )
@@ -158,6 +168,25 @@ def create_event_router():
         await handle_group_message(ctx.ws, ctx.event.raw)
 
     return router
+
+
+def _event_text(event: MessageEvent) -> str:
+    if event.raw_message:
+        return str(event.raw_message)
+
+    parts = []
+    for segment in event.message_segments:
+        if segment.get("type") == "text":
+            parts.append(str(segment.get("data", {}).get("text", "")))
+    return "".join(parts)
+
+
+def _is_test_group_admin_command(ctx: BotContext) -> bool:
+    if not bot_interfaces or not bot_interfaces["test_if_super_user"](ctx.event.user_id):
+        return False
+
+    message_text = _event_text(ctx.event).strip()
+    return message_text.startswith(TEST_GROUP_COMMAND_PREFIXES)
 
 
 async def execute_function(ws, message):

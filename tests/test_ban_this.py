@@ -40,6 +40,7 @@ class BanThisCommandTests(unittest.TestCase):
 
     def make_handler(self, data_dir: Path):
         sent_group: list[tuple[int, str]] = []
+        test_group_store = self.plugin_state.TestGroupStore(data_dir / "test_groups.json", [100])
 
         async def decode(text):
             return text
@@ -56,6 +57,7 @@ class BanThisCommandTests(unittest.TestCase):
                 "send_group_message": send_group,
                 "send_private_message": send_private,
                 "test_if_super_user": lambda user_id: int(user_id) == 1,
+                "test_group_store": test_group_store,
             },
             {},
         )
@@ -226,6 +228,74 @@ class BanThisCommandTests(unittest.TestCase):
 
             self.assertFalse(handler.is_group_agent_enabled(100))
             self.assertIn("权限不足", sent[-1][1])
+
+    def test_testgroup_command_lists_adds_and_removes_groups(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            handler, sent = self.make_handler(Path(tmp))
+
+            asyncio.run(
+                handler.handle_command(
+                    None,
+                    self.command_handlers.MessageType.GROUP,
+                    self.command_handlers.CommandType.TESTGROUP,
+                    ".testgroup ls",
+                    group_id=100,
+                    user_id=1,
+                )
+            )
+            self.assertIn("100", sent[-1][1])
+
+            asyncio.run(
+                handler.handle_command(
+                    None,
+                    self.command_handlers.MessageType.GROUP,
+                    self.command_handlers.CommandType.TESTGROUP,
+                    ".testgroup add 200",
+                    group_id=100,
+                    user_id=1,
+                )
+            )
+            self.assertTrue(handler.is_test_group_allowed(200))
+            self.assertIn("已加入测试群", sent[-1][1])
+
+            asyncio.run(
+                handler.handle_command(
+                    None,
+                    self.command_handlers.MessageType.GROUP,
+                    self.command_handlers.CommandType.TESTGROUP,
+                    ".tg rm 100",
+                    group_id=100,
+                    user_id=1,
+                )
+            )
+            self.assertFalse(handler.is_test_group_allowed(100))
+            self.assertIn("已移出测试群", sent[-1][1])
+
+    def test_testgroup_command_rejects_non_super_user(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            handler, sent = self.make_handler(Path(tmp))
+
+            asyncio.run(
+                handler.handle_command(
+                    None,
+                    self.command_handlers.MessageType.GROUP,
+                    self.command_handlers.CommandType.TESTGROUP,
+                    ".testgroup add 200",
+                    group_id=100,
+                    user_id=2,
+                )
+            )
+
+            self.assertFalse(handler.is_test_group_allowed(200))
+            self.assertIn("权限不足", sent[-1][1])
+
+    def test_plugin_reload_target_resolution_uses_plugin_modules_only(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            handler, _sent = self.make_handler(Path(tmp))
+
+            self.assertEqual(handler._plugin_reload_targets("pixiv"), ["plugins.pixiv"])
+            self.assertEqual(handler._plugin_reload_targets(".jm"), ["plugins.jm2pdf"])
+            self.assertIn("plugins.markdown", handler._plugin_reload_targets("all"))
 
 
 class MutedGroupOrchestratorTests(unittest.TestCase):

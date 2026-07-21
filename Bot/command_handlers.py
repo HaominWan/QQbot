@@ -1,4 +1,5 @@
 import asyncio
+import importlib
 import os
 import re
 import shutil
@@ -6,16 +7,37 @@ import subprocess
 import sys
 from enum import Enum
 from pathlib import Path
+from types import ModuleType
 from typing import Optional
 
 from plugins import P5_card, YGO_find_card, ciallo, drawing, jm2pdf, markdown, pixiv, typst_renderer
-from plugin_state import GroupAgentModeStore, GroupBotBanStore, GroupPluginBanStore, UserBanStore
+from plugin_state import GroupAgentModeStore, GroupBotBanStore, GroupPluginBanStore, TestGroupStore, UserBanStore
 from tool_router import Tool, ToolRouter, ToolScope
 
 _BOT_DIR = Path(__file__).resolve().parent
 _ROOT_DIR = _BOT_DIR.parent
 _WINDOWS_RESTART_SCRIPT = _ROOT_DIR / "run.bat"
 _USER_BAN_RE = re.compile(r"^(?:user|qq)\s*[:：]?\s*(?:\[CQ:at,qq=)?(\d+)", re.I)
+_PLUGIN_MODULE_ALIASES = {
+    "draw": "plugins.drawing",
+    "drawing": "plugins.drawing",
+    "typ": "plugins.typst_renderer",
+    "typst": "plugins.typst_renderer",
+    "typst_renderer": "plugins.typst_renderer",
+    "md": "plugins.markdown",
+    "markdown": "plugins.markdown",
+    "ygo": "plugins.YGO_find_card",
+    "ygo_find_card": "plugins.YGO_find_card",
+    "p5": "plugins.P5_card",
+    "p5_card": "plugins.P5_card",
+    "jm": "plugins.jm2pdf",
+    "jm2pdf": "plugins.jm2pdf",
+    "pixiv": "plugins.pixiv",
+    "ciallo": "plugins.ciallo",
+    "gemini": "plugins.gemini",
+    "vision": "plugins.vision",
+    "stickers": "plugins.stickers",
+}
 
 
 class CommandType(Enum):
@@ -34,6 +56,8 @@ class CommandType(Enum):
     BAN = "ban"
     UNBAN = "unban"
     AGENT = "agent"
+    TESTGROUP = "testgroup"
+    PLUGIN = "plugin"
 
 
 class MessageType(Enum):
@@ -53,6 +77,9 @@ class CommandHandler:
         self.group_agent_modes = GroupAgentModeStore(_BOT_DIR / "data" / "group_agent_modes.json")
         self.group_plugin_bans = GroupPluginBanStore(_BOT_DIR / "data" / "group_plugin_bans.json")
         self.user_bans = UserBanStore(_BOT_DIR / "data" / "banned_users.json")
+        self.test_groups = bot_interfaces.get("test_group_store") or TestGroupStore(
+            _BOT_DIR / "data" / "test_groups.json"
+        )
         self.recent_jm_recommendations: dict[int, list[dict]] = {}
         self.help_message = """========================
 .help              查看此帮助
@@ -62,6 +89,8 @@ class CommandHandler:
 .clean             清空当前群记忆      ★
 .ban / .unban      禁用管理            ★
 .agent on/off      群聊自主回复模式    ★
+.testgroup ls/add/rm 测试群管理        ★
+.plugin reload     插件热重载          ★
 .draw              AI 绘图
 .typ / .typst      Typst 渲染
 .md / .markdown    Markdown 渲染
@@ -146,6 +175,22 @@ class CommandHandler:
 
 .ciallo
 发送 NPUCraft 主服、工业服、资源服和狐务器地图/数据面板链接。""",
+            "testgroup": """测试群管理语法
+
+.testgroup ls
+列出当前允许 Bot 响应的测试群。
+.testgroup add <群号>
+加入指定测试群；在目标群内可省略群号。
+.testgroup rm <群号>
+移出指定测试群；在目标群内可省略群号。
+别名：.tg；add 也支持 ad，rm 也支持 remove/del。""",
+            "plugin": """插件热重载语法
+
+.plugin reload [插件名|all]
+重新加载 Bot/plugins 下的插件模块，并刷新 handlers，无需重启 Bot。
+.plugin ls
+列出可热重载的插件模块。
+别名：.plg；也可直接使用 .plugin <插件名>。""",
         }
         self._register_tools()
 
@@ -212,6 +257,24 @@ class CommandHandler:
                     group_handler=self._handle_agent_group,
                     private_handler=self._handle_agent_private,
                     description="群聊自主回复模式",
+                    super_only=True,
+                ),
+                Tool(
+                    name="testgroup",
+                    command_type=CommandType.TESTGROUP,
+                    prefixes=[".testgroup", ".tg"],
+                    group_handler=self._handle_testgroup_group,
+                    private_handler=self._handle_testgroup_private,
+                    description="测试群管理",
+                    super_only=True,
+                ),
+                Tool(
+                    name="plugin",
+                    command_type=CommandType.PLUGIN,
+                    prefixes=[".plugin", ".plg"],
+                    group_handler=self._handle_plugin_group,
+                    private_handler=self._handle_plugin_private,
+                    description="插件热重载",
                     super_only=True,
                 ),
                 Tool(
@@ -626,6 +689,211 @@ class CommandHandler:
             return
         # 自主回复模式只在群聊中生效，私聊不支持
         await self._send_private_text(ws, user_id, "Agent 模式只对群聊生效，请在目标群内使用 .agent on / .agent off")
+
+    def is_test_group_allowed(self, group_id: int | str) -> bool:
+        return self.test_groups.contains(group_id)
+
+    async def _handle_testgroup_group(
+        self,
+        ws,
+        message_content: str,
+        group_id: int,
+        user_id: int,
+        **kwargs,
+    ):
+        if not self.bot_interfaces["test_if_super_user"](user_id):
+            await self._send_group_text(ws, group_id, "权限不足，仅超级用户可管理测试群")
+            return
+
+        response = self._run_testgroup_command(message_content, default_group_id=group_id)
+        await self._send_group_text(ws, group_id, response)
+
+    async def _handle_testgroup_private(self, ws, message_content: str, user_id: int, **kwargs):
+        if not self.bot_interfaces["test_if_super_user"](user_id):
+            await self._send_private_text(ws, user_id, "权限不足，仅超级用户可管理测试群")
+            return
+
+        response = self._run_testgroup_command(message_content, default_group_id=None)
+        await self._send_private_text(ws, user_id, response)
+
+    def _run_testgroup_command(self, message_content: str, default_group_id: int | None) -> str:
+        raw_content = self.extract_command_content(message_content, CommandType.TESTGROUP)
+        parts = raw_content.strip().split()
+        action = parts[0].lower() if parts else "ls"
+
+        if action in {"ls", "list", "status"}:
+            groups = self.test_groups.list()
+            if not groups:
+                return "当前没有测试群。使用 .testgroup add <群号> 添加。"
+            return "当前测试群：\n" + "\n".join(f"- {group_id}" for group_id in groups)
+
+        if action in {"add", "ad", "加入", "添加"}:
+            target = self._testgroup_target(parts, default_group_id)
+            if target is None:
+                return "请提供群号：.testgroup add <群号>"
+            if not target.isdigit():
+                return f"群号必须是数字：{target}"
+            changed = self.test_groups.add(target)
+            if changed:
+                return f"已加入测试群：{target}"
+            return f"群 {target} 已经在测试组中"
+
+        if action in {"rm", "remove", "del", "delete", "移出", "删除"}:
+            target = self._testgroup_target(parts, default_group_id)
+            if target is None:
+                return "请提供群号：.testgroup rm <群号>"
+            if not target.isdigit():
+                return f"群号必须是数字：{target}"
+            changed = self.test_groups.remove(target)
+            if changed:
+                return f"已移出测试群：{target}"
+            return f"群 {target} 本来就不在测试组中"
+
+        return "用法：.testgroup ls | .testgroup add <群号> | .testgroup rm <群号>"
+
+    @staticmethod
+    def _testgroup_target(parts: list[str], default_group_id: int | None) -> Optional[str]:
+        if len(parts) >= 2:
+            return parts[1].strip()
+        if default_group_id is None:
+            return None
+        return str(default_group_id)
+
+    async def _handle_plugin_group(
+        self,
+        ws,
+        message_content: str,
+        group_id: int,
+        user_id: int,
+        **kwargs,
+    ):
+        if not self.bot_interfaces["test_if_super_user"](user_id):
+            await self._send_group_text(ws, group_id, "权限不足，仅超级用户可热重载插件")
+            return
+
+        response = await self._run_plugin_command(message_content)
+        await self._send_group_text(ws, group_id, response)
+
+    async def _handle_plugin_private(self, ws, message_content: str, user_id: int, **kwargs):
+        if not self.bot_interfaces["test_if_super_user"](user_id):
+            await self._send_private_text(ws, user_id, "权限不足，仅超级用户可热重载插件")
+            return
+
+        response = await self._run_plugin_command(message_content)
+        await self._send_private_text(ws, user_id, response)
+
+    async def _run_plugin_command(self, message_content: str) -> str:
+        raw_content = self.extract_command_content(message_content, CommandType.PLUGIN)
+        parts = raw_content.strip().split(maxsplit=1)
+        action = parts[0].lower() if parts else "reload"
+
+        if action in {"ls", "list"}:
+            modules = sorted(set(self._discover_plugin_modules().values()))
+            return "可热重载插件模块：\n" + "\n".join(f"- {module}" for module in modules)
+
+        if action in {"reload", "rl", "hotreload", "load"}:
+            target = parts[1] if len(parts) > 1 else "all"
+        else:
+            target = raw_content.strip() or "all"
+
+        try:
+            module_names = self._plugin_reload_targets(target)
+            reloaded = self._reload_plugin_modules(module_names)
+            reload_handlers = self.bot_interfaces.get("reload_handlers")
+            if reload_handlers is not None:
+                await reload_handlers()
+        except Exception as exc:
+            return f"插件热重载失败：{type(exc).__name__}: {exc}"
+
+        return "插件热重载完成：\n" + "\n".join(f"- {module}" for module in reloaded)
+
+    def _discover_plugin_modules(self) -> dict[str, str]:
+        modules = dict(_PLUGIN_MODULE_ALIASES)
+        plugin_dir = _BOT_DIR / "plugins"
+        for path in plugin_dir.glob("*.py"):
+            if path.stem == "__init__":
+                continue
+            modules[path.stem.lower()] = f"plugins.{path.stem}"
+        return modules
+
+    def _plugin_reload_targets(self, target: str) -> list[str]:
+        key = target.strip().lstrip(".").replace("-", "_").lower()
+        modules = self._discover_plugin_modules()
+        if not key or key in {"all", "*"}:
+            return sorted(set(modules.values()))
+
+        direct_module = self._normalize_plugin_module_name(target)
+        if direct_module:
+            return [direct_module]
+
+        candidates = [key]
+        tool = self.tool_router.find_tool(key)
+        if tool is not None:
+            candidates.append(tool.name.lower())
+            candidates.extend(prefix.lstrip(".").lower() for prefix in tool.prefixes)
+            command_value = getattr(tool.command_type, "value", "")
+            candidates.append(str(command_value).lower())
+
+        for candidate in candidates:
+            module_name = modules.get(candidate.replace("-", "_").lower())
+            if module_name:
+                return [module_name]
+
+        available = "、".join(sorted(modules))
+        raise ValueError(f"未知插件 {target!r}。可用：{available}")
+
+    @staticmethod
+    def _normalize_plugin_module_name(target: str) -> Optional[str]:
+        module_name = target.strip()
+        if not module_name:
+            return None
+        if module_name.startswith("plugins."):
+            stem = module_name.rsplit(".", 1)[-1]
+        elif "." not in module_name:
+            stem = module_name
+            module_name = f"plugins.{module_name}"
+        else:
+            return None
+
+        if not stem or stem == "__init__":
+            return None
+        plugin_path = (_BOT_DIR / "plugins" / f"{stem}.py").resolve()
+        try:
+            plugin_path.relative_to((_BOT_DIR / "plugins").resolve())
+        except ValueError:
+            return None
+        if plugin_path.exists():
+            return module_name
+        return None
+
+    def _reload_plugin_modules(self, module_names: list[str]) -> list[str]:
+        reloaded = []
+        for module_name in module_names:
+            module = importlib.import_module(module_name)
+            if not self._is_plugin_module(module):
+                raise ValueError(f"{module_name} 不在 Bot/plugins 下，已拒绝重载")
+            importlib.reload(module)
+            reloaded.append(module_name)
+
+        plugins_package = importlib.import_module("plugins")
+        importlib.reload(plugins_package)
+        return reloaded
+
+    @staticmethod
+    def _is_plugin_module(module: ModuleType) -> bool:
+        module_name = getattr(module, "__name__", "")
+        if not module_name.startswith("plugins."):
+            return False
+
+        module_file = getattr(module, "__file__", None)
+        if module_file is None:
+            return False
+
+        try:
+            Path(module_file).resolve().relative_to((_BOT_DIR / "plugins").resolve())
+        except (OSError, ValueError):
+            return False
+        return True
 
     def _manageable_tool_names(self) -> str:
         return "、".join(tool.name for tool in self.tool_router.controllable_tools())
