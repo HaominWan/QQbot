@@ -1,6 +1,8 @@
 import asyncio
 import importlib
+import json
 import os
+import platform
 import re
 import shutil
 import subprocess
@@ -42,6 +44,7 @@ _PLUGIN_MODULE_ALIASES = {
 
 class CommandType(Enum):
     HELP = "help"
+    STATUS = "status"
     RESET = "reset"
     STOP = "stop"
     CLEAN = "clean"
@@ -84,6 +87,7 @@ class CommandHandler:
         self.help_message = """========================
 .help              查看此帮助
 .help <插件名>     查看插件语法
+.status            查看 Bot 状态
 .reset             重启 Bot            ★
 .stop              强制停止 Bot        ★
 .clean             清空当前群记忆      ★
@@ -204,6 +208,14 @@ class CommandHandler:
                     group_handler=self._handle_help_group,
                     private_handler=self._handle_help_private,
                     description="显示插件信息",
+                ),
+                Tool(
+                    name="status",
+                    command_type=CommandType.STATUS,
+                    prefixes=[".status"],
+                    group_handler=self._handle_status_group,
+                    private_handler=self._handle_status_private,
+                    description="查看 Bot 状态",
                 ),
                 Tool(
                     name="reset",
@@ -503,6 +515,214 @@ class CommandHandler:
 
     async def _handle_help_private(self, ws, message_content: str, user_id: int, **kwargs):
         await self._send_private_text(ws, user_id, self._get_help_message(message_content))
+
+    async def _handle_status_group(self, ws, message_content: str, group_id: int, **kwargs):
+        await self._send_group_text(ws, group_id, self._format_status_message())
+
+    async def _handle_status_private(self, ws, message_content: str, user_id: int, **kwargs):
+        await self._send_private_text(ws, user_id, self._format_status_message())
+
+    def _format_status_message(self) -> str:
+        memory = self._memory_usage_text()
+        return "\n".join(
+            [
+                "🤖QQBot - Bot状态🤖",
+                "",
+                "✨QQBot Framework 版本: EventRouter 1.0",
+                f"🥵QQBot 版本: {self._project_version()}",
+                f"💻OS 版本: {self._os_version()}",
+                f"💻CPU: {self._cpu_name()}",
+                f"💻GPU: {self._gpu_name()}",
+                f"💻内存占用： {memory}",
+                "",
+                "✨Author: QQBot Project✨",
+                "✨Powered by NapCatQQ + OneBot v11✨",
+            ]
+        )
+
+    @staticmethod
+    def _project_version() -> str:
+        package_path = _ROOT_DIR / "package.json"
+        try:
+            with package_path.open("r", encoding="utf-8") as f:
+                package_data = json.load(f)
+            version = str(package_data.get("version") or "").strip()
+            if version:
+                return version
+        except (OSError, json.JSONDecodeError):
+            pass
+
+        commit = CommandHandler._git_short_commit()
+        if commit:
+            return f"dev ({commit})"
+        return "dev"
+
+    @staticmethod
+    def _git_short_commit() -> str:
+        git_dir = _ROOT_DIR / ".git"
+        head_path = git_dir / "HEAD"
+        try:
+            head = head_path.read_text(encoding="utf-8").strip()
+        except OSError:
+            return ""
+
+        if head.startswith("ref:"):
+            ref_name = head.split(":", 1)[1].strip()
+            ref_path = git_dir / ref_name
+            try:
+                commit = ref_path.read_text(encoding="utf-8").strip()
+            except OSError:
+                commit = CommandHandler._git_packed_ref(git_dir, ref_name)
+        else:
+            commit = head
+
+        if re.fullmatch(r"[0-9a-fA-F]{7,40}", commit or ""):
+            return commit[:7]
+        return ""
+
+    @staticmethod
+    def _git_packed_ref(git_dir: Path, ref_name: str) -> str:
+        packed_refs = git_dir / "packed-refs"
+        try:
+            lines = packed_refs.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            return ""
+
+        suffix = f" {ref_name}"
+        for line in lines:
+            if line.startswith("#") or line.startswith("^"):
+                continue
+            if line.endswith(suffix):
+                return line.split(maxsplit=1)[0]
+        return ""
+
+    @staticmethod
+    def _os_version() -> str:
+        if os.name == "nt":
+            edition = platform.win32_edition()
+            release = platform.release()
+            version = platform.version()
+            parts = ["Windows"]
+            if release:
+                parts.append(release)
+            if edition:
+                parts.append(edition)
+            if version:
+                parts.append(f"({version})")
+            return " ".join(parts)
+
+        return platform.platform()
+
+    @staticmethod
+    def _cpu_name() -> str:
+        if os.name == "nt":
+            name = CommandHandler._run_status_command(
+                [
+                    "powershell",
+                    "-NoProfile",
+                    "-Command",
+                    "(Get-CimInstance Win32_Processor | Select-Object -First 1 -ExpandProperty Name)",
+                ]
+            )
+            if name:
+                return name
+
+        return platform.processor() or platform.machine() or "未获取"
+
+    @staticmethod
+    def _gpu_name() -> str:
+        if os.name == "nt":
+            names = CommandHandler._run_status_command_lines(
+                [
+                    "powershell",
+                    "-NoProfile",
+                    "-Command",
+                    "Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name",
+                ]
+            )
+            if names:
+                return " / ".join(names)
+
+        return "未获取"
+
+    @staticmethod
+    def _memory_usage_text() -> str:
+        memory = CommandHandler._memory_usage_bytes()
+        if memory is None:
+            return "未获取"
+
+        used_bytes, total_bytes = memory
+        return f"{CommandHandler._bytes_to_gb(used_bytes)}/{CommandHandler._bytes_to_gb(total_bytes)}"
+
+    @staticmethod
+    def _memory_usage_bytes() -> Optional[tuple[int, int]]:
+        if os.name == "nt":
+            try:
+                import ctypes
+
+                class MEMORYSTATUSEX(ctypes.Structure):
+                    _fields_ = [
+                        ("dwLength", ctypes.c_ulong),
+                        ("dwMemoryLoad", ctypes.c_ulong),
+                        ("ullTotalPhys", ctypes.c_ulonglong),
+                        ("ullAvailPhys", ctypes.c_ulonglong),
+                        ("ullTotalPageFile", ctypes.c_ulonglong),
+                        ("ullAvailPageFile", ctypes.c_ulonglong),
+                        ("ullTotalVirtual", ctypes.c_ulonglong),
+                        ("ullAvailVirtual", ctypes.c_ulonglong),
+                        ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+                    ]
+
+                status = MEMORYSTATUSEX()
+                status.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
+                if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
+                    total = int(status.ullTotalPhys)
+                    available = int(status.ullAvailPhys)
+                    return total - available, total
+            except Exception as exc:
+                print(f"[Status] Failed to read Windows memory status: {exc}")
+
+        try:
+            page_size = os.sysconf("SC_PAGE_SIZE")
+            total_pages = os.sysconf("SC_PHYS_PAGES")
+            available_pages = os.sysconf("SC_AVPHYS_PAGES")
+            total = int(page_size * total_pages)
+            available = int(page_size * available_pages)
+            return total - available, total
+        except (AttributeError, OSError, ValueError):
+            return None
+
+    @staticmethod
+    def _bytes_to_gb(size_bytes: int) -> str:
+        return f"{size_bytes / (1024 ** 3):.2f}GB"
+
+    @staticmethod
+    def _run_status_command(args: list[str]) -> str:
+        lines = CommandHandler._run_status_command_lines(args)
+        return lines[0] if lines else ""
+
+    @staticmethod
+    def _run_status_command_lines(args: list[str]) -> list[str]:
+        try:
+            kwargs = {}
+            if os.name == "nt" and hasattr(subprocess, "CREATE_NO_WINDOW"):
+                kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+            result = subprocess.run(
+                args,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="ignore",
+                timeout=2,
+                **kwargs,
+            )
+        except Exception as exc:
+            print(f"[Status] Failed to run {args[0]}: {exc}")
+            return []
+
+        if result.returncode != 0:
+            return []
+        return [line.strip() for line in result.stdout.splitlines() if line.strip()]
 
     async def _handle_reset_group(
         self,

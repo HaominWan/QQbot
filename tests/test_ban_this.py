@@ -117,6 +117,28 @@ class BanThisCommandTests(unittest.TestCase):
             self.assertFalse(handler.is_group_bot_banned(100))
             self.assertIn("已恢复 Bot 在本群的回复", sent[-1][1])
 
+    def test_status_command_reports_project_runtime_info(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            handler, sent = self.make_handler(Path(tmp))
+
+            handled = asyncio.run(
+                handler.handle_command(
+                    None,
+                    self.command_handlers.MessageType.GROUP,
+                    self.command_handlers.CommandType.STATUS,
+                    ".status",
+                    group_id=100,
+                    user_id=2,
+                )
+            )
+
+            self.assertTrue(handled)
+            self.assertIn("QQBot - Bot状态", sent[-1][1])
+            self.assertIn("QQBot Framework 版本", sent[-1][1])
+            self.assertIn("QQBot 版本", sent[-1][1])
+            self.assertIn("OS 版本", sent[-1][1])
+            self.assertIn("内存占用", sent[-1][1])
+
     def test_command_chain_splits_only_when_every_part_is_command(self):
         with tempfile.TemporaryDirectory() as tmp:
             handler, _sent = self.make_handler(Path(tmp))
