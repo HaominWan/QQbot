@@ -517,26 +517,29 @@ class CommandHandler:
         await self._send_private_text(ws, user_id, self._get_help_message(message_content))
 
     async def _handle_status_group(self, ws, message_content: str, group_id: int, **kwargs):
-        await self._send_group_text(ws, group_id, self._format_status_message())
+        message = await asyncio.to_thread(self._format_status_message)
+        await self._send_group_text(ws, group_id, message)
 
     async def _handle_status_private(self, ws, message_content: str, user_id: int, **kwargs):
-        await self._send_private_text(ws, user_id, self._format_status_message())
+        message = await asyncio.to_thread(self._format_status_message)
+        await self._send_private_text(ws, user_id, message)
 
     def _format_status_message(self) -> str:
         memory = self._memory_usage_text()
         return "\n".join(
             [
-                "🤖QQBot - Bot状态🤖",
+                "📊 QQBot 运行状态",
+                "━━━━━━━━━━━━━━",
                 "",
-                "✨QQBot Framework 版本: EventRouter 1.0",
-                f"🥵QQBot 版本: {self._project_version()}",
-                f"💻OS 版本: {self._os_version()}",
-                f"💻CPU: {self._cpu_name()}",
-                f"💻GPU: {self._gpu_name()}",
-                f"💻内存占用： {memory}",
+                "🧩 框架版本：EventRouter 1.0",
+                f"🏷️ Bot 版本：{self._project_version()}",
+                f"🖥️ 操作系统：{self._os_version()}",
+                f"🧠 CPU：{self._cpu_name()}",
+                f"🎮 GPU：{self._gpu_name()}",
+                f"💾 内存占用：{memory}",
                 "",
-                "✨Author: QQBot Project✨",
-                "✨Powered by NapCatQQ + OneBot v11✨",
+                "👤 Author：QQBot Project",
+                "⚡ Powered by NapCatQQ + OneBot v11",
             ]
         )
 
@@ -611,7 +614,44 @@ class CommandHandler:
                 parts.append(f"({version})")
             return " ".join(parts)
 
+        if platform.system() == "Linux":
+            distro = CommandHandler._linux_distribution_name()
+            if CommandHandler._is_wsl():
+                return f"{distro} (WSL2)"
+            return distro
+
         return platform.platform()
+
+    @staticmethod
+    def _linux_distribution_name() -> str:
+        try:
+            os_release = platform.freedesktop_os_release()
+        except (AttributeError, OSError):
+            try:
+                content = Path("/etc/os-release").read_text(encoding="utf-8", errors="ignore")
+            except OSError:
+                return f"Linux {platform.release()}"
+            os_release = CommandHandler._parse_os_release(content)
+
+        return (
+            os_release.get("PRETTY_NAME")
+            or " ".join(
+                part
+                for part in (os_release.get("NAME"), os_release.get("VERSION"))
+                if part
+            )
+            or f"Linux {platform.release()}"
+        )
+
+    @staticmethod
+    def _parse_os_release(content: str) -> dict[str, str]:
+        values = {}
+        for line in content.splitlines():
+            key, separator, value = line.partition("=")
+            if not separator or not key:
+                continue
+            values[key] = value.strip().strip("\"'")
+        return values
 
     @staticmethod
     def _cpu_name() -> str:
@@ -627,23 +667,144 @@ class CommandHandler:
             if name:
                 return name
 
+        if platform.system() == "Linux":
+            name = CommandHandler._linux_cpu_name()
+            if name:
+                return name
+
+            if CommandHandler._is_wsl():
+                name = CommandHandler._windows_host_hardware_name("Win32_Processor")
+                if name:
+                    return name
+
         return platform.processor() or platform.machine() or "未获取"
+
+    @staticmethod
+    def _linux_cpu_name() -> str:
+        try:
+            cpuinfo = Path("/proc/cpuinfo").read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            return ""
+        return CommandHandler._parse_cpuinfo_model(cpuinfo)
+
+    @staticmethod
+    def _parse_cpuinfo_model(cpuinfo: str) -> str:
+        fields = {}
+        for line in cpuinfo.splitlines():
+            key, separator, value = line.partition(":")
+            if separator and value.strip():
+                fields.setdefault(key.strip().lower(), value.strip())
+
+        for key in ("model name", "hardware", "processor", "cpu model"):
+            value = fields.get(key, "")
+            if value and not value.isdigit():
+                return re.sub(r"\s+", " ", value)
+        return ""
 
     @staticmethod
     def _gpu_name() -> str:
         if os.name == "nt":
-            names = CommandHandler._run_status_command_lines(
-                [
-                    "powershell",
-                    "-NoProfile",
-                    "-Command",
-                    "Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name",
-                ]
-            )
+            names = CommandHandler._windows_hardware_names("Win32_VideoController")
+            if names:
+                return " / ".join(names)
+
+        if platform.system() == "Linux":
+            names = CommandHandler._nvidia_gpu_names()
+            if names:
+                return " / ".join(names)
+
+            if CommandHandler._is_wsl():
+                names = CommandHandler._windows_hardware_names("Win32_VideoController")
+                if names:
+                    return " / ".join(names)
+
+            names = CommandHandler._lspci_gpu_names()
             if names:
                 return " / ".join(names)
 
         return "未获取"
+
+    @staticmethod
+    def _nvidia_gpu_names() -> list[str]:
+        names = CommandHandler._run_status_command_lines(
+            ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader,nounits"]
+        )
+        if not names and Path("/usr/lib/wsl/lib/nvidia-smi").is_file():
+            names = CommandHandler._run_status_command_lines(
+                [
+                    "/usr/lib/wsl/lib/nvidia-smi",
+                    "--query-gpu=name",
+                    "--format=csv,noheader,nounits",
+                ]
+            )
+        if names:
+            return CommandHandler._unique_hardware_names(names)
+        return []
+
+    @staticmethod
+    def _lspci_gpu_names() -> list[str]:
+        lspci_lines = CommandHandler._run_status_command_lines(["lspci"])
+        return CommandHandler._parse_lspci_gpu_names(lspci_lines)
+
+    @staticmethod
+    def _parse_lspci_gpu_names(lines: list[str]) -> list[str]:
+        names = []
+        pattern = re.compile(
+            r"(?:VGA compatible controller|3D controller|Display controller):\s*(.+)",
+            re.IGNORECASE,
+        )
+        for line in lines:
+            match = pattern.search(line)
+            if not match:
+                continue
+            name = re.sub(r"\s+\(rev [^)]+\)$", "", match.group(1), flags=re.IGNORECASE)
+            names.append(name)
+        return CommandHandler._unique_hardware_names(names)
+
+    @staticmethod
+    def _windows_host_hardware_name(class_name: str) -> str:
+        names = CommandHandler._windows_hardware_names(class_name)
+        return names[0] if names else ""
+
+    @staticmethod
+    def _windows_hardware_names(class_name: str) -> list[str]:
+        powershell = "powershell" if os.name == "nt" else "powershell.exe"
+        lines = CommandHandler._run_status_command_lines(
+            [
+                powershell,
+                "-NoProfile",
+                "-Command",
+                (
+                    "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; "
+                    f"Get-CimInstance {class_name} | Select-Object -ExpandProperty Name"
+                ),
+            ]
+        )
+        return CommandHandler._unique_hardware_names(lines)
+
+    @staticmethod
+    def _unique_hardware_names(names: list[str]) -> list[str]:
+        unique_names = []
+        seen = set()
+        for name in names:
+            normalized = re.sub(r"\s+", " ", name).strip()
+            key = normalized.casefold()
+            if normalized and key not in seen:
+                seen.add(key)
+                unique_names.append(normalized)
+        return unique_names
+
+    @staticmethod
+    def _is_wsl() -> bool:
+        if platform.system() != "Linux":
+            return False
+        if "microsoft" in platform.release().lower():
+            return True
+        try:
+            version = Path("/proc/version").read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            return False
+        return "microsoft" in version.lower()
 
     @staticmethod
     def _memory_usage_text() -> str:
@@ -716,8 +877,7 @@ class CommandHandler:
                 timeout=2,
                 **kwargs,
             )
-        except Exception as exc:
-            print(f"[Status] Failed to run {args[0]}: {exc}")
+        except (OSError, subprocess.SubprocessError):
             return []
 
         if result.returncode != 0:
