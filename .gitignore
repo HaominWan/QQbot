@@ -31,6 +31,7 @@ startup.log
 
 # Python
 __pycache__/
+/tests/
 *.py[cod]
 *.pyo
 *.pyd
