@@ -1,11 +1,11 @@
 {
   "api_keys": {
-    "deepseek": "YOUR_DEEPSEEK_API_KEY",
-    "openrouter": "YOUR_OPENROUTER_API_KEY",
-    "gemini": "YOUR_GEMINI_API_KEY",
-    "groq": "YOUR_GROQ_API_KEY",
-    "openai": "YOUR_OPENAI_API_KEY",
-    "prodia": "YOUR_PRODIA_API_KEY",
+    "deepseek": "",
+    "openrouter": "",
+    "gemini": "",
+    "groq": "",
+    "openai": "",
+    "prodia": "",
     "hf_token": "",
     "pixiv_refresh_token": ""
   },
@@ -22,8 +22,8 @@
     "allow_model_request": true
   },
   "bot_settings": {
-    "super_users": [123456789],
-    "test_groups": [123456789],
+    "super_users": [],
+    "test_groups": [],
     "host": "127.0.0.1",
     "port": "8080",
     "proxy_url": "http://127.0.0.1:7890"

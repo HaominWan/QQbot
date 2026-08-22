@@ -10,8 +10,19 @@ env/
 .venv/
 .venv*/
 
-# Bot Configuration
+# Bot configuration and local secrets
 config.json
+config.local.json
+config.*.local.json
+.env
+.env.*
+!.env.example
+!.env.sample
+!.env.template
+*.pem
+*.key
+*.p12
+*.pfx
 
 # Custom persona prompts (personal, not for sharing)
 roles/murasame_card.py
@@ -30,6 +41,18 @@ tmp/
 
 # Vector memory database (local data, not for sharing)
 memory_db/
+
+# Runtime state (QQ/user/group identifiers and SQLite journals)
+data/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.sqlite3
+*.sqlite3-shm
+*.sqlite3-wal
 
 # VS Code
 .vscode/

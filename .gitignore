@@ -1,6 +1,18 @@
-# Sensitive config
-Bot/config.json
+# Local configuration and secrets. Only sanitized *.example / *.sample files
+# should be committed.
+**/config.json
+**/config.local.json
+**/config.*.local.json
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.sample
+!**/.env.template
 keystore.json
+*.pem
+*.key
+*.p12
+*.pfx
 
 # Local assistant/project data
 .claude/
@@ -40,7 +52,16 @@ Bot/.venv/
 Bot/myenv/
 Bot/tmp/
 Bot/memory_db/
-Bot/data/group_plugin_bans.json
+Bot/data/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.sqlite3
+*.sqlite3-shm
+*.sqlite3-wal
 *.egg-info/
 dist/
 build/

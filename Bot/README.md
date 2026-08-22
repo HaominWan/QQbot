@@ -73,10 +73,10 @@ npm install markdown-it markdown-it-texmath katex puppeteer
 ```json
 {
   "api_keys": {
-    "deepseek":   "sk-...",
-    "openrouter": "sk-or-v1-...",
-    "gemini":     "AIza...",
-    "groq":       "gsk_...",
+    "deepseek":   "",
+    "openrouter": "",
+    "gemini":     "",
+    "groq":       "",
     "openai":     "",
     "prodia":     "",
     "hf_token":   "",
@@ -95,8 +95,8 @@ npm install markdown-it markdown-it-texmath katex puppeteer
     "allow_model_request": true
   },
   "bot_settings": {
-    "super_users": [你的QQ号],
-    "test_groups":  [启用Bot的群号],
+    "super_users": [],
+    "test_groups":  [],
     "host":      "127.0.0.1",
     "port":      "8080",
     "proxy_url": "http://127.0.0.1:7890"
@@ -119,6 +119,22 @@ npm install markdown-it markdown-it-texmath katex puppeteer
   }
 }
 ```
+
+把管理员 QQ 号填入 `super_users`，把允许 Bot 响应的群号填入 `test_groups`。
+API Key 既可写入本地 `Bot/config.json`，也可通过环境变量提供；环境变量优先，支持
+`DEEPSEEK_API_KEY`、`OPENROUTER_API_KEY`、`GEMINI_API_KEY`、`GROQ_API_KEY`、
+`OPENAI_API_KEY`、`HF_TOKEN` 和 `PIXIV_REFRESH_TOKEN`。
+
+`Bot/config.json`、本地 `.env`/`.env.local`、`Bot/data/`、SQLite 数据库及 WAL 文件
+均属于本地敏感或运行态数据，已被 Git 忽略。提交前建议从项目根目录运行：
+
+```bash
+python scripts/check_tracked_secrets.py
+git check-ignore -v Bot/config.json Bot/data/test_groups.json
+```
+
+更完整的密钥处理、泄露响应和历史审计说明见项目根目录的
+[`SECURITY.md`](../SECURITY.md)。
 
 **字段说明：**
 
@@ -274,6 +290,7 @@ QQBot/
 ## 注意事项
 
 - `Bot/config.json` 含 API Key，已加入 `.gitignore`
+- `Bot/data/` 与 `*.db*` 可能含 QQ 号、群号和聊天记忆，也已加入 `.gitignore`
 - 向量记忆数据库存于 `Bot/memory_db/`，已加入 `.gitignore`
 - 中国大陆建议配置代理访问 DeepSeek / Gemini
 - Puppeteer 首次运行会下载 Chromium
